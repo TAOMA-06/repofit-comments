@@ -1,0 +1,32 @@
+{
+  "name": "repofit-comments",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Comment-first CLI for reducing AI-style narration in TypeScript diffs while preserving repository intent.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "repofit": "dist/src/cli.js"
+  },
+  "files": [
+    "dist/src",
+    "README.md",
+    "STATUS.md",
+    "evidence"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "prepare": "npm run build",
+    "test": "npm run build && node --test dist/test/*.test.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "typescript": "6.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  }
+}
