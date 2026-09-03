@@ -4,6 +4,14 @@
   "private": true,
   "description": "Comment-first CLI for reducing AI-style narration in TypeScript diffs while preserving repository intent.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TAOMA-06/repofit-comments.git"
+  },
+  "homepage": "https://github.com/TAOMA-06/repofit-comments#readme",
+  "bugs": {
+    "url": "https://github.com/TAOMA-06/repofit-comments/issues"
+  },
   "type": "module",
   "bin": {
     "repofit": "dist/src/cli.js"

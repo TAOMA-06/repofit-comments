@@ -22,6 +22,8 @@ See [STATUS.md](./STATUS.md) for the exact evidence boundary. The public-history
 Requires Node.js 22 or newer.
 
 ```bash
+git clone https://github.com/TAOMA-06/repofit-comments.git
+cd repofit-comments
 npm install
 npm run build
 ```
