@@ -4,7 +4,7 @@ Date: 2026-09-03
 
 ## Current classification
 
-**Implemented and locally verified Alpha candidate. Not an npm package or production release.**
+**Published and locally verified public GitHub Alpha. Not an npm package or production release.**
 
 ## Implemented
 
@@ -30,6 +30,7 @@ Date: 2026-09-03
 - Runtime dependency audit reports 0 known vulnerabilities at the time of validation.
 - Package dry run excludes tests and development sources from the installable file list.
 - A packed tarball installs in a clean temporary prefix; its `repofit --help` command and a scan of the cleaned Grok fixture both run successfully through the installed binary.
+- The initial public `main` push completed its Ubuntu/Node.js 22 GitHub Actions workflow successfully.
 
 ## Live model-generated evaluation
 
@@ -58,7 +59,7 @@ These are useful smoke cases, not a statistically valid precision or recall stud
 
 - The planned corpus of at least five independent repositories and fifty real AI-assisted diffs has not been collected.
 - Maintainer blind A/B preference, real-world precision, recall, false-positive, and suggestion-acceptance thresholds have not been measured.
-- No public npm package, Homebrew formula, signed release, or production distribution has been created. A GitHub Actions workflow is included, but no remote CI run is counted as verified until it actually completes.
+- The source is public at [`TAOMA-06/repofit-comments`](https://github.com/TAOMA-06/repofit-comments). No public npm package, Homebrew formula, signed release, or production distribution has been created.
 - Node.js 22 on macOS is the verified runtime in this workspace; other Node and operating-system combinations have not been run here.
 - Automatic rewriting of suggestion-only comments, variable renaming, structural cleanup, and languages other than TypeScript/TSX remain out of scope.
 

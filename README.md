@@ -1,5 +1,7 @@
 # RepoFit Comments
 
+[![CI](https://github.com/TAOMA-06/repofit-comments/actions/workflows/ci.yml/badge.svg)](https://github.com/TAOMA-06/repofit-comments/actions/workflows/ci.yml)
+
 RepoFit Comments 是一个本地终端工具，用来检查当前 TypeScript/TSX Git Diff 中显眼的生成式注释写法，并在可证明不改变代码时进行保守清理。
 
 It focuses on presentation patterns such as numbered steps, decorative headings, nearby duplicates, narrow line-by-line restatements, tutorial tone, and generation-process narration. It does **not** determine who wrote code, falsify authorship, remove a hidden model watermark, or promise to bypass an AI detector.
