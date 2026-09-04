@@ -190,14 +190,7 @@ No SaaS work begins until at least five teams ask for shared policy or audit fea
 
 ## Go, pivot, stop
 
-Go to stable v1 when all Phase C and D gates pass.
-
-Pivot to a plugin or rule pack for an existing scanner when either condition holds:
-
-- maintainers do not value the proof receipt or staged verification;
-- fewer than half of labeled AI-assisted diffs contain an actionable comment change.
-
-Go, pivot, and stop decisions use the thresholds in [V1_PRODUCT_SPEC.md](./V1_PRODUCT_SPEC.md), which is the sole normative source. This execution plan does not define a second acceptance threshold. Protected-intent loss remaining above zero is always a stop condition.
+Go, pivot, and stop decisions use the conditions and thresholds in [V1_PRODUCT_SPEC.md](./V1_PRODUCT_SPEC.md), which is the sole normative source. This execution plan intentionally defines no additional decision threshold.
 
 ## Current next action
 

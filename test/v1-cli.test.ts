@@ -67,11 +67,16 @@ test("top-level init, print-config, and doctor form a complete offline setup loo
       type: string;
       configuration: { source: string };
       capabilities: { readOnlyAnalysis: boolean; automaticWrites: boolean };
+      checks: Array<{ id: string; detail: string }>;
     };
     assert.equal(report.type, "doctor");
     assert.equal(report.configuration.source, "repository");
     assert.equal(report.capabilities.readOnlyAnalysis, true);
     assert.equal(report.capabilities.automaticWrites, process.platform !== "win32");
+    assert.match(
+      report.checks.find((check) => check.id === "runtime.node")?.detail ?? "",
+      />=22\.14\.0/,
+    );
 
     const repeated = spawnSync(process.execPath, [cliPath, "init"], {
       cwd: root,
@@ -385,6 +390,48 @@ test("an unchanged reasoned suppression controls a newly added comment", () => {
       ruleId: "comments.step-label",
       reason: "external protocol uses numbered phases",
     }]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("batched diff ranges stay attached to Unicode paths in Git byte order", () => {
+  const root = repository("repofit-v1-unicode-diff-order-");
+  try {
+    const astralPath = join(root, "\u{10000}.ts");
+    const privateUsePath = join(root, "\uE000.ts");
+    const astralBaseline = [
+      "export function astral(): number {",
+      "  // Step 1",
+      "  return 1;",
+      "}",
+      "",
+    ].join("\n");
+    const privateUseBaseline = [
+      "export function privateUse(): number {",
+      "  const value = 1;",
+      "  // Step 2",
+      "  return value;",
+      "}",
+      "",
+    ].join("\n");
+    writeFileSync(astralPath, astralBaseline);
+    writeFileSync(privateUsePath, privateUseBaseline);
+    git(root, ["add", "."]);
+    git(root, ["commit", "-qm", "unicode baseline"]);
+    writeFileSync(astralPath, astralBaseline.replace("return 1", "return 2"));
+    writeFileSync(
+      privateUsePath,
+      privateUseBaseline.replace("const value = 1", "const value = 2"),
+    );
+
+    const checked = spawnSync(
+      process.execPath,
+      [cliPath, "check", "--worktree", "--format", "json"],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert.equal(checked.status, 0, checked.stderr);
+    assert.deepEqual(JSON.parse(checked.stdout).findings, []);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

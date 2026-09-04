@@ -75,7 +75,13 @@ test("consumer Action runner writes SARIF inside the workspace and reports outpu
       GITHUB_WORKSPACE: root,
       INPUT_BASE: base,
     };
-    for (const blockedOutput of ["package.json", ".git/result.sarif", "bad\tname.sarif", "linked.sarif"]) {
+    for (const blockedOutput of [
+      "package.json",
+      ".git/result.sarif",
+      ".GIT/result.sarif",
+      "bad\tname.sarif",
+      "linked.sarif",
+    ]) {
       const blocked = spawnSync(process.execPath, [actionScript], {
         encoding: "utf8",
         env: { ...commonEnvironment, INPUT_OUTPUT: blockedOutput },

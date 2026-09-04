@@ -49,8 +49,8 @@ export function createDoctorReport(
       id: "runtime.node",
       status: nodeSupported ? "pass" : "fail",
       detail: nodeSupported
-        ? `Node ${process.versions.node} satisfies the >=22 runtime requirement.`
-        : `Node ${process.versions.node} is unsupported; install Node 22 or newer.`,
+        ? `Node ${process.versions.node} satisfies the >=22.14.0 runtime requirement.`
+        : `Node ${process.versions.node} is unsupported; install Node 22.14.0 or newer.`,
     },
     {
       id: "repository.git",

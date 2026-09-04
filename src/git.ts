@@ -299,8 +299,22 @@ function readDiffRanges(
       "--",
       ...paths,
     ]);
+    const gitOrderedPaths = splitNullTerminated(
+      runGit(root, [
+        ...prefix,
+        "--name-only",
+        "--diff-filter=ACMR",
+        "-z",
+        "--",
+        ...paths,
+      ]),
+    ).filter(isSupportedSourcePath);
     const sections = output.split(/^diff --git /mu).slice(1);
-    if (sections.length !== paths.length) {
+    const requested = new Set(paths);
+    const orderedPathsAreExact =
+      gitOrderedPaths.length === paths.length &&
+      gitOrderedPaths.every((relativePath) => requested.has(relativePath));
+    if (sections.length !== gitOrderedPaths.length || !orderedPathsAreExact) {
       for (const relativePath of paths) {
         ranges.set(
           relativePath,
@@ -310,7 +324,7 @@ function readDiffRanges(
       continue;
     }
     sections.forEach((section, index) => {
-      const relativePath = paths[index];
+      const relativePath = gitOrderedPaths[index];
       if (relativePath) ranges.set(relativePath, parseAddedLineRanges(section));
     });
   }
