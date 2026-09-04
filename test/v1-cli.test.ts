@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
@@ -46,7 +46,7 @@ test("top-level init, print-config, and doctor form a complete offline setup loo
       path: string;
     };
     assert.equal(initialization.type, "config-initialized");
-    assert.equal(initialization.path.endsWith(`/${CONFIG_FILE_NAME}`), true);
+    assert.equal(basename(initialization.path), CONFIG_FILE_NAME);
     assert.doesNotThrow(() => JSON.parse(readFileSync(initialization.path, "utf8")));
 
     const printed = spawnSync(

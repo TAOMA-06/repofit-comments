@@ -55,7 +55,17 @@ function createChangedRepository(prefix: string, attributes?: string): {
   };
 }
 
-function createMarkerProgram(root: string, name: string): { markerPath: string; programPath: string } {
+function gitShellCommand(executable: string, programPath: string): string {
+  const portableExecutable = executable.replaceAll("\\", "/");
+  const portableProgramPath = programPath.replaceAll("\\", "/");
+  return `"${portableExecutable}" "${portableProgramPath}"`;
+}
+
+function createMarkerProgram(root: string, name: string): {
+  markerPath: string;
+  programPath: string;
+  command: string;
+} {
   const markerPath = join(root, `${name}.marker`);
   const programPath = join(root, `${name}.cjs`);
   writeFileSync(
@@ -71,7 +81,11 @@ function createMarkerProgram(root: string, name: string): { markerPath: string; 
     { encoding: "utf8", mode: 0o755 },
   );
   chmodSync(programPath, 0o755);
-  return { markerPath, programPath };
+  return {
+    markerPath,
+    programPath,
+    command: gitShellCommand(process.execPath, programPath),
+  };
 }
 
 function runWorktreeCheck(root: string, environment: NodeJS.ProcessEnv = process.env): AnalysisReport {
@@ -107,7 +121,7 @@ test("Git runner ignores inherited GIT_EXTERNAL_DIFF while normal analysis still
     const marker = createMarkerProgram(fixture.root, "environment-external-diff");
     const hostileEnvironment = {
       ...process.env,
-      GIT_EXTERNAL_DIFF: marker.programPath,
+      GIT_EXTERNAL_DIFF: marker.command,
     };
     proveUnhardenedDiffWouldRunMarker(fixture.root, marker.markerPath, hostileEnvironment);
     runWorktreeCheck(fixture.root, hostileEnvironment);
@@ -121,7 +135,7 @@ test("Git runner disables a repository-configured external diff command", () => 
   const fixture = createChangedRepository("repofit-git-external-config-");
   try {
     const marker = createMarkerProgram(fixture.root, "configured-external-diff");
-    git(fixture.root, ["config", "diff.external", marker.programPath]);
+    git(fixture.root, ["config", "diff.external", marker.command]);
     proveUnhardenedDiffWouldRunMarker(fixture.root, marker.markerPath);
     runWorktreeCheck(fixture.root);
     assert.equal(existsSync(marker.markerPath), false);
@@ -137,7 +151,7 @@ test("Git runner disables an attribute-selected external diff driver", () => {
   );
   try {
     const marker = createMarkerProgram(fixture.root, "configured-external-driver");
-    git(fixture.root, ["config", "diff.repofit-command.command", marker.programPath]);
+    git(fixture.root, ["config", "diff.repofit-command.command", marker.command]);
     proveUnhardenedDiffWouldRunMarker(fixture.root, marker.markerPath);
     runWorktreeCheck(fixture.root);
     assert.equal(existsSync(marker.markerPath), false);
@@ -153,7 +167,7 @@ test("Git runner disables a repository-configured textconv driver", () => {
   );
   try {
     const marker = createMarkerProgram(fixture.root, "configured-textconv");
-    git(fixture.root, ["config", "diff.repofit-marker.textconv", marker.programPath]);
+    git(fixture.root, ["config", "diff.repofit-marker.textconv", marker.command]);
     proveUnhardenedDiffWouldRunMarker(fixture.root, marker.markerPath);
     runWorktreeCheck(fixture.root);
     assert.equal(existsSync(marker.markerPath), false);
@@ -170,7 +184,7 @@ test("Git runner discards GIT_CONFIG_COUNT command injection", () => {
       ...process.env,
       GIT_CONFIG_COUNT: "1",
       GIT_CONFIG_KEY_0: "diff.external",
-      GIT_CONFIG_VALUE_0: marker.programPath,
+      GIT_CONFIG_VALUE_0: marker.command,
     };
     proveUnhardenedDiffWouldRunMarker(fixture.root, marker.markerPath, hostileEnvironment);
     runWorktreeCheck(fixture.root, hostileEnvironment);
