@@ -2,7 +2,7 @@
 
 Date: 2026-09-04
 
-Code under test: `cf2970afa7c17479086bb1efcf3a86b95ec66007`
+Latest implementation commit under test: `0b2ecba`
 
 Version: `1.0.0-rc.1`
 
@@ -25,10 +25,9 @@ The clean code commit was built with npm `11.19.1`. `verify-release.mjs` accepte
 
 - tarball: `repofit-comments-1.0.0-rc.1.tgz`
 - tarball SHA-256: `d42d7ec924d94c4edefc96f6a74609cfde764b2d3f57a47c91b3a74a2a913f66`
-- SPDX JSON SHA-256: `049838115f96fd8b930253eaa6fdd2e4bc5540edd4039b5460e31278e9c63d1a`
 - npm integrity: `sha512-TX0Nj1yz46FrMC2Y5bdEJCIK/B6JOVrsYXkeeGMRmhjMN2i4CVor/OlhAGoCGb+O+UK7V8kiBGrZBx6CKcLvzg==`
 
-The evidence document is not included in the npm tarball, so adding this record does not alter the package bytes.
+The evidence document and composite Action implementation are not included in the npm tarball, so adding this record and tightening Action output confinement do not alter the package bytes. The final run-specific SPDX hash remains recorded in the generated release manifest rather than recursively embedded here.
 
 ## Model-generated fixture boundary
 
