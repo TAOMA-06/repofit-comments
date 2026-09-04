@@ -1,16 +1,5 @@
-import {
-  closeSync,
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { randomUUID } from "node:crypto";
+import { statSync } from "node:fs";
 
 import {
   extractComments,
@@ -18,11 +7,70 @@ import {
   parseErrorCount,
   syntaxTreeHash,
 } from "./analyzer.js";
-import { getAbsoluteGitDirectory, readWorkingTreeContent } from "./git.js";
+import {
+  readIndexContent,
+  readWorkingTreeContent,
+  resolveSafeWorkingTreePath,
+} from "./git.js";
+import { decodeUtf8Bytes } from "./encoding.js";
 import { sha256 } from "./hash.js";
-import type { Finding, FixReceipt } from "./model.js";
-import { REPORT_SCHEMA_VERSION } from "./model.js";
+import type { Finding, FixReceipt, PreparedFixReceipt, Scope } from "./model.js";
+import { RECEIPT_SCHEMA_VERSION } from "./model.js";
 import { protectedCommentHash } from "./protection.js";
+import { automaticWriteBlockReason } from "./platform.js";
+import {
+  acquireRepositoryWriteLock,
+  assertCanCreateRecoveryRecord,
+  createReceiptStore,
+  initializeReceiptStoreForWrite,
+  openReceiptStore,
+  readBackup,
+  readLatestReceipt,
+  writeBackup,
+  writeReceiptState,
+  type RecoveryAdmissionLimits,
+  type ReceiptStoreContext,
+} from "./receipt-store.js";
+import {
+  markAborted,
+  markApplied,
+  markUndone,
+  prepareUndo,
+  recoverAborted,
+  recoverApplied,
+  recoverUndone,
+} from "./receipt.js";
+import {
+  reconcileInterruptedReplacement,
+  replaceExpectedSource,
+  type RecoveryPlan,
+  type SourceTransactionFaultStage,
+} from "./source-transaction.js";
+import { sanitizeTerminalText } from "./terminal.js";
+
+type PatchFaultStage =
+  | "after-journal"
+  | "after-source-displaced"
+  | "after-candidate-installed"
+  | "after-source-write"
+  | "after-undo-journal"
+  | "after-undo-write";
+
+interface PatchExecutionOptions {
+  faultStage?: PatchFaultStage;
+  beforeSourceReplacement?: () => void;
+  beforeUndoReplacement?: () => void;
+  recoveryLimits?: RecoveryAdmissionLimits;
+}
+
+interface VerifyExecutionOptions {
+  afterReceiptRead?: () => void;
+}
+
+function assertAutomaticWritesSupported(): void {
+  const reason = automaticWriteBlockReason();
+  if (reason) throw new Error(reason);
+}
 
 export interface CandidateVerification {
   valid: boolean;
@@ -69,7 +117,10 @@ function editForFinding(content: string, finding: Finding): FindingEdit {
   };
 }
 
-function candidateForFindings(content: string, findings: Finding[]): string {
+export function buildCandidateForFindings(
+  content: string,
+  findings: Finding[],
+): string {
   if (findings.length === 0) {
     throw new Error("At least one safe finding is required.");
   }
@@ -146,10 +197,10 @@ export function previewFinding(finding: Finding): string {
   const replacement =
     finding.action === "remove-safe" ? "(remove comment)" : finding.suggestedReplacement;
   return [
-    `--- ${finding.relativePath}:${finding.line}`,
-    `+++ ${finding.relativePath}:${finding.line}`,
-    `- ${finding.original}`,
-    `+ ${replacement ?? "(no automatic replacement)"}`,
+    `--- ${sanitizeTerminalText(finding.relativePath)}:${finding.line}`,
+    `+++ ${sanitizeTerminalText(finding.relativePath)}:${finding.line}`,
+    `- ${sanitizeTerminalText(finding.original)}`,
+    `+ ${sanitizeTerminalText(replacement ?? "(no automatic replacement)")}`,
   ].join("\n");
 }
 
@@ -157,45 +208,45 @@ export function previewFindings(findings: Finding[]): string {
   return findings.map((finding) => previewFinding(finding)).join("\n\n");
 }
 
-function receiptPath(root: string): string {
-  return join(getAbsoluteGitDirectory(root), "repofit-comments", "last-fix.json");
+function currentFileMode(root: string, relativePath: string): number {
+  return statSync(resolveSafeWorkingTreePath(root, relativePath)).mode & 0o777;
 }
 
-function writeReceipt(root: string, receipt: FixReceipt): void {
-  const path = receiptPath(root);
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${JSON.stringify(receipt, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-}
-
-function atomicWrite(path: string, content: string): void {
-  const directory = dirname(path);
-  const temporaryPath = join(
-    directory,
-    `.${basename(path)}.repofit-${process.pid}-${Date.now()}.tmp`,
+function readVerifiedBackup(
+  store: ReceiptStoreContext,
+  receipt: FixReceipt,
+  appliedContent: string,
+): Uint8Array {
+  const bytes = readBackup(store, receipt);
+  const beforeContent = decodeUtf8Bytes(
+    bytes,
+    `Backup for receipt ${receipt.receiptId}`,
   );
-  const sourceMetadata = lstatSync(path);
-  if (sourceMetadata.isSymbolicLink() || !sourceMetadata.isFile()) {
-    throw new Error("Refusing to replace a symbolic link or non-regular file.");
+  const verification = verifyCandidate(
+    receipt.relativePath,
+    appliedContent,
+    beforeContent,
+  );
+  if (!verification.valid) {
+    throw new Error(
+      `Backup for receipt ${receipt.receiptId} is not semantically reversible: ${verification.reasons.join(" ")}`,
+    );
   }
-  const mode = statSync(path).mode;
-  let descriptor: number | undefined;
-  try {
-    descriptor = openSync(temporaryPath, "wx", mode);
-    writeFileSync(descriptor, content, "utf8");
-    closeSync(descriptor);
-    descriptor = undefined;
-    renameSync(temporaryPath, path);
-  } finally {
-    if (descriptor !== undefined) {
-      closeSync(descriptor);
-    }
-    if (existsSync(temporaryPath)) {
-      rmSync(temporaryPath);
-    }
-  }
+  return bytes;
 }
 
-export function applyFindings(root: string, findings: Finding[]): FixReceipt {
+export function applyFindings(
+  root: string,
+  findings: Finding[],
+  analysisScope: Scope = { kind: "worktree" },
+  options: PatchExecutionOptions = {},
+): FixReceipt {
+  if (analysisScope.kind !== "worktree") {
+    throw new Error(
+      "Automatic fixes only support --worktree. Staged and base scopes are read-only.",
+    );
+  }
+  assertAutomaticWritesSupported();
   const first = findings[0];
   if (!first) {
     throw new Error("At least one safe finding is required.");
@@ -211,54 +262,283 @@ export function applyFindings(root: string, findings: Finding[]): FixReceipt {
     throw new Error("A batch fix must come from one analysis snapshot.");
   }
 
-  const current = readWorkingTreeContent(root, first.relativePath);
-  if (sha256(current) !== first.sourceHash) {
-    throw new Error(
-      `File changed after analysis: ${first.relativePath}. Re-run check before applying.`,
+  const receiptId = randomUUID();
+  const store = createReceiptStore(root);
+  const releaseLock = acquireRepositoryWriteLock(store, first.relativePath, receiptId);
+  try {
+    const repositoryId = initializeReceiptStoreForWrite(store);
+    const current = readWorkingTreeContent(root, first.relativePath);
+    if (sha256(current) !== first.sourceHash) {
+      throw new Error(
+        `File changed after analysis: ${first.relativePath}. Re-run check before applying.`,
+      );
+    }
+
+    const candidate = buildCandidateForFindings(current, findings);
+    const verification = verifyCandidate(first.relativePath, current, candidate);
+    if (!verification.valid) {
+      throw new Error(`Patch verification refused: ${verification.reasons.join(" ")}`);
+    }
+
+    const fileMode = currentFileMode(root, first.relativePath);
+    const beforeBytes = Buffer.from(current, "utf8");
+    const afterBytes = Buffer.from(candidate, "utf8");
+    const preparedReceipt: PreparedFixReceipt = {
+      schemaVersion: RECEIPT_SCHEMA_VERSION,
+      receiptId,
+      repositoryId,
+      status: "prepared",
+      findingIds: findings.map((finding) => finding.id),
+      relativePath: first.relativePath,
+      analysisScope,
+      writeTarget: "worktree",
+      preparedAt: new Date().toISOString(),
+      fileMode,
+      beforeFileHash: sha256(beforeBytes),
+      afterFileHash: sha256(afterBytes),
+      nonCommentTokenHash: verification.beforeTokenHash,
+      syntaxTreeHash: verification.beforeSyntaxTreeHash,
+      protectedCommentHash: verification.beforeProtectedCommentHash,
+    };
+    assertCanCreateRecoveryRecord(store, beforeBytes.byteLength, options.recoveryLimits);
+    writeBackup(store, receiptId, beforeBytes);
+    writeReceiptState(store, preparedReceipt);
+    if (options.faultStage === "after-journal") {
+      throw new Error("Injected failure after the recovery journal was written.");
+    }
+
+    if (
+      sha256(readWorkingTreeContent(root, first.relativePath)) !== first.sourceHash ||
+      currentFileMode(root, first.relativePath) !== fileMode
+    ) {
+      const abortedReceipt = markAborted(
+        preparedReceipt,
+        new Date().toISOString(),
+        "The source file or its mode changed before replacement.",
+      );
+      writeReceiptState(store, abortedReceipt);
+      throw new Error(
+        `File changed while preparing the patch: ${first.relativePath}. Nothing was written.`,
+      );
+    }
+
+    options.beforeSourceReplacement?.();
+    const sourceFaultStage: SourceTransactionFaultStage | undefined =
+      options.faultStage === "after-source-displaced" ||
+      options.faultStage === "after-candidate-installed"
+        ? options.faultStage
+        : undefined;
+    replaceExpectedSource(
+      root,
+      first.relativePath,
+      afterBytes,
+      preparedReceipt.beforeFileHash,
+      fileMode,
+      receiptId,
+      sourceFaultStage,
     );
+    if (options.faultStage === "after-source-write") {
+      throw new Error("Injected failure after the source file was replaced.");
+    }
+    const receipt = markApplied(preparedReceipt, new Date().toISOString());
+    writeReceiptState(store, receipt);
+    return receipt;
+  } finally {
+    releaseLock();
   }
-
-  const candidate = candidateForFindings(current, findings);
-  const verification = verifyCandidate(first.relativePath, current, candidate);
-  if (!verification.valid) {
-    throw new Error(`Patch verification refused: ${verification.reasons.join(" ")}`);
-  }
-
-  // Re-check immediately before the atomic replacement to avoid overwriting an intervening edit.
-  if (sha256(readWorkingTreeContent(root, first.relativePath)) !== first.sourceHash) {
-    throw new Error(
-      `File changed while preparing the patch: ${first.relativePath}. Nothing was written.`,
-    );
-  }
-
-  atomicWrite(join(root, first.relativePath), candidate);
-  const receipt: FixReceipt = {
-    schemaVersion: REPORT_SCHEMA_VERSION,
-    findingIds: findings.map((finding) => finding.id),
-    relativePath: first.relativePath,
-    appliedAt: new Date().toISOString(),
-    beforeFileHash: first.sourceHash,
-    afterFileHash: sha256(candidate),
-    nonCommentTokenHash: verification.beforeTokenHash,
-    syntaxTreeHash: verification.beforeSyntaxTreeHash,
-    protectedCommentHash: verification.beforeProtectedCommentHash,
-  };
-  writeReceipt(root, receipt);
-  return receipt;
 }
 
-export function applyFinding(root: string, finding: Finding): FixReceipt {
-  return applyFindings(root, [finding]);
+export function applyFinding(
+  root: string,
+  finding: Finding,
+  analysisScope: Scope = { kind: "worktree" },
+  options: PatchExecutionOptions = {},
+): FixReceipt {
+  return applyFindings(root, [finding], analysisScope, options);
 }
 
-export function verifyLastFix(root: string): { valid: boolean; reasons: string[]; receipt: FixReceipt } {
-  const path = receiptPath(root);
-  if (!existsSync(path)) {
-    throw new Error("No RepoFit fix receipt found in this repository.");
+export function undoLastFix(
+  root: string,
+  options: PatchExecutionOptions = {},
+): FixReceipt {
+  assertAutomaticWritesSupported();
+  const store = openReceiptStore(root);
+  const operationId = randomUUID();
+  const releaseLock = acquireRepositoryWriteLock(store, "<latest-receipt>", operationId);
+  try {
+    const receipt = readLatestReceipt(store);
+    if (receipt.status === "undone") {
+      throw new Error(`Receipt ${receipt.receiptId} has already been undone.`);
+    }
+    if (receipt.status === "aborted") {
+      throw new Error(`Receipt ${receipt.receiptId} was aborted; no applied fix can be undone.`);
+    }
+    if (receipt.status !== "applied") {
+      throw new Error(
+        `Receipt ${receipt.receiptId} is ${receipt.status}; run recover before undo.`,
+      );
+    }
+
+    const current = readWorkingTreeContent(root, receipt.relativePath);
+    const currentHash = sha256(Buffer.from(current, "utf8"));
+    if (currentHash !== receipt.afterFileHash) {
+      throw new Error(
+        `File changed after receipt ${receipt.receiptId}; undo refused to protect newer edits.`,
+      );
+    }
+    if (currentFileMode(root, receipt.relativePath) !== receipt.fileMode) {
+      throw new Error(
+        `File mode changed after receipt ${receipt.receiptId}; undo refused to overwrite it.`,
+      );
+    }
+
+    const beforeBytes = readVerifiedBackup(store, receipt, current);
+    const undoPreparedReceipt = prepareUndo(
+      receipt,
+      operationId,
+      new Date().toISOString(),
+    );
+    writeReceiptState(store, undoPreparedReceipt);
+    if (options.faultStage === "after-undo-journal") {
+      throw new Error("Injected failure after the undo journal was written.");
+    }
+
+    if (
+      sha256(Buffer.from(readWorkingTreeContent(root, receipt.relativePath), "utf8")) !==
+        receipt.afterFileHash ||
+      currentFileMode(root, receipt.relativePath) !== receipt.fileMode
+    ) {
+      throw new Error(
+        `File changed while preparing undo for receipt ${receipt.receiptId}; nothing was written.`,
+      );
+    }
+    options.beforeUndoReplacement?.();
+    const sourceFaultStage: SourceTransactionFaultStage | undefined =
+      options.faultStage === "after-source-displaced" ||
+      options.faultStage === "after-candidate-installed"
+        ? options.faultStage
+        : undefined;
+    replaceExpectedSource(
+      root,
+      receipt.relativePath,
+      beforeBytes,
+      receipt.afterFileHash,
+      receipt.fileMode,
+      operationId,
+      sourceFaultStage,
+    );
+    if (options.faultStage === "after-undo-write") {
+      throw new Error("Injected failure after the original bytes were restored.");
+    }
+
+    const undoneReceipt = markUndone(undoPreparedReceipt, new Date().toISOString());
+    writeReceiptState(store, undoneReceipt);
+    return undoneReceipt;
+  } finally {
+    releaseLock();
   }
-  const receipt = JSON.parse(readFileSync(path, "utf8")) as FixReceipt;
-  const current = readWorkingTreeContent(root, receipt.relativePath);
+}
+
+export function recoverLastFix(root: string): FixReceipt {
+  assertAutomaticWritesSupported();
+  const store = openReceiptStore(root);
+  const operationId = randomUUID();
+  const releaseLock = acquireRepositoryWriteLock(
+    store,
+    "<latest-receipt>",
+    operationId,
+    true,
+  );
+  try {
+    const receipt = readLatestReceipt(store);
+    if (receipt.status !== "prepared" && receipt.status !== "undo-prepared") {
+      throw new Error(
+        `Receipt ${receipt.receiptId} is ${receipt.status} and does not need recovery.`,
+      );
+    }
+
+    const recoveryPlan: RecoveryPlan = {
+      receiptId: receipt.receiptId,
+      relativePath: receipt.relativePath,
+      operationId:
+        receipt.status === "prepared" ? receipt.receiptId : receipt.undoOperationId,
+      capturedHash:
+        receipt.status === "prepared" ? receipt.beforeFileHash : receipt.afterFileHash,
+      installedHash:
+        receipt.status === "prepared" ? receipt.afterFileHash : receipt.beforeFileHash,
+      expectedMode: receipt.fileMode,
+    };
+    reconcileInterruptedReplacement(root, recoveryPlan);
+    const current = readWorkingTreeContent(root, receipt.relativePath);
+    const currentHash = sha256(Buffer.from(current, "utf8"));
+    const currentMode = currentFileMode(root, receipt.relativePath);
+    if (currentMode !== receipt.fileMode) {
+      throw new Error(
+        `File mode does not match receipt ${receipt.receiptId}; recovery refused.`,
+      );
+    }
+
+    const validateAppliedSide = (): void => {
+      readVerifiedBackup(store, receipt, current);
+    };
+
+    const recoveredAt = new Date().toISOString();
+    let recovered: FixReceipt;
+    if (receipt.status === "prepared" && currentHash === receipt.beforeFileHash) {
+      recovered = recoverAborted(
+        receipt,
+        recoveredAt,
+        "Recovery confirmed the source replacement never occurred.",
+      );
+    } else if (receipt.status === "prepared" && currentHash === receipt.afterFileHash) {
+      validateAppliedSide();
+      recovered = recoverApplied(receipt, recoveredAt);
+    } else if (
+      receipt.status === "undo-prepared" &&
+      currentHash === receipt.beforeFileHash
+    ) {
+      recovered = recoverUndone(receipt, recoveredAt);
+    } else if (
+      receipt.status === "undo-prepared" &&
+      currentHash === receipt.afterFileHash
+    ) {
+      validateAppliedSide();
+      recovered = recoverApplied(receipt, recoveredAt);
+    } else {
+      throw new Error(
+        `File bytes match neither side of receipt ${receipt.receiptId}; recovery refused.`,
+      );
+    }
+
+    writeReceiptState(store, recovered);
+    return recovered;
+  } finally {
+    releaseLock();
+  }
+}
+
+export function verifyLastFix(
+  root: string,
+  target: "worktree" | "staged" = "worktree",
+  options: VerifyExecutionOptions = {},
+): { valid: boolean; reasons: string[]; receipt: FixReceipt; target: "worktree" | "staged" } {
+  const store = openReceiptStore(root);
+  const receipt = readLatestReceipt(store);
+  const receiptSnapshotHash = sha256(JSON.stringify(receipt));
+  options.afterReceiptRead?.();
+  const current =
+    target === "staged"
+      ? readIndexContent(root, receipt.relativePath)
+      : readWorkingTreeContent(root, receipt.relativePath);
+  const initialMode =
+    target === "worktree" ? currentFileMode(root, receipt.relativePath) : undefined;
   const reasons: string[] = [];
+
+  if (receipt.status !== "applied") {
+    reasons.push(
+      `Only an applied receipt can verify; the latest journal is ${receipt.status}. Run recover for an interrupted state.`,
+    );
+  }
 
   if (sha256(current) !== receipt.afterFileHash) {
     reasons.push("The file no longer matches the applied patch receipt.");
@@ -278,6 +558,33 @@ export function verifyLastFix(root: string): { valid: boolean; reasons: string[]
   if (parseErrorCount(receipt.relativePath, current) !== 0) {
     reasons.push("The current file has parse diagnostics.");
   }
+  if (
+    target === "worktree" &&
+    initialMode !== receipt.fileMode
+  ) {
+    reasons.push("The working-tree file mode differs from the applied fix receipt.");
+  }
 
-  return { valid: reasons.length === 0, reasons, receipt };
+  const latestAfterVerification = readLatestReceipt(store);
+  if (sha256(JSON.stringify(latestAfterVerification)) !== receiptSnapshotHash) {
+    reasons.push("The latest fix receipt changed during verification.");
+  }
+  const currentAfterVerification =
+    target === "staged"
+      ? readIndexContent(root, receipt.relativePath)
+      : readWorkingTreeContent(root, receipt.relativePath);
+  if (
+    sha256(Buffer.from(currentAfterVerification, "utf8")) !==
+    sha256(Buffer.from(current, "utf8"))
+  ) {
+    reasons.push("The verification target changed during verification.");
+  }
+  if (
+    target === "worktree" &&
+    currentFileMode(root, receipt.relativePath) !== initialMode
+  ) {
+    reasons.push("The working-tree file mode changed during verification.");
+  }
+
+  return { valid: reasons.length === 0, reasons, receipt, target };
 }

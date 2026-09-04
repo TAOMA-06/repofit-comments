@@ -1,0 +1,42 @@
+name: RepoFit Comments
+description: Scan a Git diff for low-value generated comment narration and emit SARIF.
+author: TAOMA-06
+branding:
+  icon: shield
+  color: blue
+inputs:
+  base:
+    description: Base commit or ref used for merge-base analysis.
+    required: true
+  output:
+    description: Top-level SARIF output filename.
+    required: false
+    default: repofit-results.sarif
+outputs:
+  sarif-path:
+    description: Top-level SARIF output filename.
+    value: ${{ steps.scan.outputs.sarif-path }}
+  findings:
+    description: Number of emitted findings.
+    value: ${{ steps.scan.outputs.findings }}
+runs:
+  using: composite
+  steps:
+    - name: Verify Node runtime
+      shell: bash
+      run: node -e "const [major,minor]=process.versions.node.split('.').map(Number); if (major < 22 || (major === 22 && minor < 14)) { console.error('RepoFit Comments requires Node 22.14 or newer. Add actions/setup-node before this Action.'); process.exit(1) }"
+    - name: Install RepoFit Action dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm ci --ignore-scripts --no-audit --no-fund
+    - name: Build RepoFit Action
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm run build
+    - name: Scan diff
+      id: scan
+      shell: bash
+      env:
+        INPUT_BASE: ${{ inputs.base }}
+        INPUT_OUTPUT: ${{ inputs.output }}
+      run: node "$GITHUB_ACTION_PATH/scripts/action-run.mjs"

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TAOMA-06/repofit-comments/schemas/finding-explanation.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "type", "toolVersion", "rulePackVersion", "finding"],
+  "properties": {
+    "schemaVersion": { "const": "2.0" },
+    "type": { "const": "finding-explanation" },
+    "toolVersion": { "type": "string" },
+    "rulePackVersion": { "const": "1.0.0" },
+    "finding": { "$ref": "analysis-report.schema.json#/$defs/finding" }
+  }
+}

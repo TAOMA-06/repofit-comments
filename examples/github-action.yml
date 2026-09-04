@@ -1,0 +1,28 @@
+name: RepoFit Comments
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  comments:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - uses: TAOMA-06/repofit-comments@v1.0.0-rc.1
+        id: repofit
+        with:
+          base: ${{ github.event.pull_request.base.sha }}
+          output: repofit-results.sarif
+      - uses: github/codeql-action/upload-sarif@fddeee1a7ece751b577e409a89057319e3172939 # v4
+        with:
+          sarif_file: repofit-results.sarif
+          category: repofit-comments

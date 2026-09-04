@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TAOMA-06/repofit-comments/schemas/fix-preview.schema.json",
+  "title": "RepoFit Comments fix preview",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "type", "toolVersion", "rulePackVersion", "write", "findings", "patches"],
+  "properties": {
+    "schemaVersion": { "const": "2.0" },
+    "type": { "const": "fix-preview" },
+    "toolVersion": { "type": "string" },
+    "rulePackVersion": { "const": "1.0.0" },
+    "write": { "const": false },
+    "findings": { "type": "array", "minItems": 1, "items": { "$ref": "analysis-report.schema.json#/$defs/finding" } },
+    "patches": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["relativePath", "findingIds", "diff"],
+        "properties": {
+          "relativePath": { "type": "string" },
+          "findingIds": { "type": "array", "items": { "type": "string" } },
+          "diff": { "type": "string" }
+        }
+      }
+    }
+  }
+}

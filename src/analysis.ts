@@ -1,4 +1,13 @@
-import { extractComments, parseErrorCount } from "./analyzer.js";
+import {
+  extractComments,
+  filterCommentsByRanges,
+  parseErrorCount,
+} from "./analyzer.js";
+import {
+  DEFAULT_CONFIG,
+  type RepoFitConfig,
+  type RuleId,
+} from "./config.js";
 import { collectScopedFiles } from "./git.js";
 import type { AnalysisReport, FileAnalysis, Scope } from "./model.js";
 import { REPORT_SCHEMA_VERSION } from "./model.js";
@@ -7,29 +16,54 @@ import { analyzeComments } from "./rules.js";
 
 const DISPLAYED_FINDING_LIMIT = 5;
 
-export function analyzeRepository(root: string, scope: Scope): AnalysisReport {
-  const files = collectScopedFiles(root, scope);
+export function analyzeRepository(
+  root: string,
+  scope: Scope,
+  config: RepoFitConfig = DEFAULT_CONFIG,
+): AnalysisReport {
+  const files = collectScopedFiles(root, scope, config);
   const profile = buildStyleProfile(
     root,
     files.map((file) => file.relativePath),
+    config,
   );
-  const analyses: FileAnalysis[] = files.map((file) => {
-    const comments = extractComments(file.relativePath, file.content, file.addedRanges);
+  const analyses: FileAnalysis[] = [];
+  let findingCount = 0;
+  for (const file of files) {
+    const allComments = extractComments(file.relativePath, file.content);
+    const comments = filterCommentsByRanges(allComments, file.addedRanges);
     const changedLineCount = file.addedRanges.reduce(
       (total, range) => total + range.end - range.start + 1,
       0,
     );
-    const result = analyzeComments(comments, file.sourceHash, profile, changedLineCount);
-    return {
+    const result = analyzeComments(comments, file.sourceHash, profile, changedLineCount, {
+      protectPhrases: config.protect.phrases,
+      suppressionComments: allComments,
+    });
+    const findings = result.findings.flatMap((finding) => {
+      const level = config.rules[finding.ruleId as RuleId];
+      return level === "off" ? [] : [{ ...finding, level }];
+    });
+    findingCount += findings.length;
+    if (findingCount > config.limits.maxFindings) {
+      throw new Error(
+        `Analysis produced more than limits.maxFindings=${config.limits.maxFindings}; refine the scope or configuration.`,
+      );
+    }
+    analyses.push({
       file,
       comments,
       protectedCount: result.protectedCount,
-      findings: result.findings,
+      protections: result.protections,
+      suppressions: result.suppressions,
+      findings,
       parseErrorCount: parseErrorCount(file.relativePath, file.content),
-    };
-  });
+    });
+  }
 
   const findings = analyses.flatMap((analysis) => analysis.findings);
+  const protections = analyses.flatMap((analysis) => analysis.protections);
+  const suppressions = analyses.flatMap((analysis) => analysis.suppressions);
   const changedCommentCount = analyses.reduce(
     (total, analysis) => total + analysis.comments.length,
     0,
@@ -45,6 +79,7 @@ export function analyzeRepository(root: string, scope: Scope): AnalysisReport {
 
   return {
     schemaVersion: REPORT_SCHEMA_VERSION,
+    rulePackVersion: config.rulePackVersion,
     generatedAt: new Date().toISOString(),
     repositoryRoot: root,
     scope,
@@ -56,6 +91,8 @@ export function analyzeRepository(root: string, scope: Scope): AnalysisReport {
       parseErrorCount: analysis.parseErrorCount,
     })),
     findings,
+    protections,
+    suppressions,
     summary: {
       analyzedFileCount: analyses.length,
       changedCommentCount,

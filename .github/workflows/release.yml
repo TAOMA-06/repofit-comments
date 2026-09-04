@@ -1,0 +1,133 @@
+name: Release candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      stage_npm:
+        description: Submit the already-bootstrapped package to npm staged publishing
+        required: true
+        type: boolean
+        default: false
+      create_github_draft:
+        description: Create a draft prerelease with the verified assets
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: npm install --global npm@11.19.1
+      - run: node -e "const {execFileSync}=require('node:child_process'); if (execFileSync('npm',['--version'],{encoding:'utf8'}).trim() !== '11.19.1') process.exit(1)"
+      - run: npm ci --ignore-scripts
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run check
+      - run: npm test
+      - run: node scripts/build-release.mjs release
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: repofit-release-${{ github.sha }}
+          path: release/
+          if-no-files-found: error
+
+  smoke:
+    needs: build
+    name: release smoke / ${{ matrix.os }} / Node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: ${{ matrix.node }}
+          package-manager-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: repofit-release-${{ github.sha }}
+          path: release
+      - run: node scripts/verify-release.mjs release
+      - run: node scripts/installed-smoke.mjs release
+
+  attest:
+    needs: smoke
+    runs-on: ubuntu-latest
+    permissions:
+      artifact-metadata: write
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: repofit-release-${{ github.sha }}
+          path: release
+      - name: Resolve versioned artifact paths
+        run: |
+          node -e "const fs=require('node:fs'); const p=require('./package.json'); fs.appendFileSync(process.env.GITHUB_ENV, 'REPOFIT_TARBALL=release/repofit-comments-'+p.version+'.tgz\nREPOFIT_SBOM=release/repofit-comments-'+p.version+'.spdx.json\n')"
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: release/*
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: ${{ env.REPOFIT_TARBALL }}
+          sbom-path: ${{ env.REPOFIT_SBOM }}
+
+  draft-github-release:
+    if: inputs.create_github_draft == true
+    needs: attest
+    runs-on: ubuntu-latest
+    environment: github-release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: repofit-release-${{ github.sha }}
+          path: release
+      - run: node scripts/verify-release.mjs release
+      - name: Create draft prerelease
+        run: gh release create "$GITHUB_REF_NAME" release/* --draft --prerelease --verify-tag --title "RepoFit Comments $GITHUB_REF_NAME"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  stage-npm:
+    if: inputs.stage_npm == true
+    needs: attest
+    runs-on: ubuntu-latest
+    environment: npm-release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org/
+          package-manager-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: repofit-release-${{ github.sha }}
+          path: release
+      - run: npm install --global npm@11.19.1
+      - name: Require the release npm version
+        run: node -e "const {execFileSync}=require('node:child_process'); if (execFileSync('npm',['--version'],{encoding:'utf8'}).trim() !== '11.19.1') process.exit(1)"
+      - run: node scripts/verify-release.mjs release
+      - run: npm stage publish release/*.tgz --tag next

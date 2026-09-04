@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TAOMA-06/repofit-comments/schemas/error.schema.json",
+  "title": "RepoFit Comments CLI error",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "type", "tool", "toolVersion", "error", "exitCode"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "type": { "const": "error" },
+    "tool": { "const": "repofit-comments" },
+    "toolVersion": { "type": "string" },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "enum": ["invalid-arguments", "analysis-failed", "write-refused"] },
+        "message": { "type": "string" }
+      }
+    },
+    "exitCode": { "enum": [2, 3, 4, 5] }
+  }
+}

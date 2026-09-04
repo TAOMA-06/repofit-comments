@@ -8,6 +8,7 @@ import {
   syntaxTreeHash,
 } from "../src/analyzer.js";
 import { parseAddedLineRanges } from "../src/git.js";
+import { sha256 } from "../src/hash.js";
 import type { StyleProfile } from "../src/model.js";
 import { verifyCandidate } from "../src/patch.js";
 import { protectedReason } from "../src/protection.js";
@@ -368,4 +369,72 @@ test("parseAddedLineRanges handles added, replaced, and deletion-only hunks", ()
     { start: 2, end: 4 },
     { start: 14, end: 14 },
   ]);
+});
+
+test("finding fingerprints survive unrelated source and line movement while IDs remain snapshot-bound", () => {
+  const firstSource = [
+    "export function value(): number {",
+    "  // Step 1",
+    "  return 1;",
+    "}",
+    "",
+  ].join("\n");
+  const secondSource = `\n${firstSource.replace("return 1", "return 1")}`;
+  const first = analyzeComments(
+    extractComments("sample.ts", firstSource),
+    sha256(firstSource),
+    sparseProfile,
+    5,
+  ).findings[0];
+  const second = analyzeComments(
+    extractComments("sample.ts", secondSource),
+    sha256(secondSource),
+    sparseProfile,
+    6,
+  ).findings[0];
+  assert.ok(first);
+  assert.ok(second);
+  assert.equal(first.fingerprint, second.fingerprint);
+  assert.notEqual(first.id, second.id);
+});
+
+test("reasoned inline suppression is visible and never turns into an automatic finding", () => {
+  const source = [
+    "export function value(): number {",
+    "  // repofit-ignore-next-line comments.step-label -- mirrors the numbered protocol in docs",
+    "  // Step 1",
+    "  return 1;",
+    "}",
+    "",
+  ].join("\n");
+  const result = analyzeComments(
+    extractComments("sample.ts", source),
+    sha256(source),
+    sparseProfile,
+    6,
+  );
+  assert.equal(result.findings.length, 0);
+  assert.equal(result.suppressions.length, 1);
+  assert.equal(result.suppressions[0]?.ruleId, "comments.step-label");
+  assert.match(result.suppressions[0]?.reason ?? "", /numbered protocol/);
+  assert.ok(result.protections.some((record) => /directive/.test(record.reason)));
+});
+
+test("a suppression without a reason does not hide the following finding", () => {
+  const source = [
+    "export function value(): number {",
+    "  // repofit-ignore-next-line comments.step-label",
+    "  // Step 1",
+    "  return 1;",
+    "}",
+    "",
+  ].join("\n");
+  const result = analyzeComments(
+    extractComments("sample.ts", source),
+    sha256(source),
+    sparseProfile,
+    6,
+  );
+  assert.equal(result.findings[0]?.ruleId, "comments.step-label");
+  assert.equal(result.suppressions.length, 0);
 });

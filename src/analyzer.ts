@@ -26,7 +26,21 @@ function overlapsRanges(startLine: number, endLine: number, ranges: LineRange[])
   return ranges.some((range) => startLine <= range.end && endLine >= range.start);
 }
 
-function nextCodeLine(text: string, position: number, relativePath: string): {
+export function filterCommentsByRanges(
+  comments: SourceComment[],
+  ranges: LineRange[],
+): SourceComment[] {
+  return comments.filter((comment) =>
+    overlapsRanges(comment.line, comment.endLine, ranges),
+  );
+}
+
+function nextCodeLine(
+  text: string,
+  position: number,
+  relativePath: string,
+  sourceFile: ts.SourceFile,
+): {
   text: string;
   line?: number;
 } {
@@ -44,13 +58,6 @@ function nextCodeLine(text: string, position: number, relativePath: string): {
 
   const tokenPosition = scanner.getTokenPos();
   const bounds = lineBounds(text, tokenPosition);
-  const sourceFile = ts.createSourceFile(
-    relativePath,
-    text,
-    ts.ScriptTarget.Latest,
-    false,
-    scriptKindFor(relativePath),
-  );
   return {
     text: text.slice(bounds.start, bounds.end).trim(),
     line: sourceFile.getLineAndCharacterOfPosition(tokenPosition).line + 1,
@@ -129,7 +136,7 @@ export function extractComments(
     const content = isLine
       ? raw.replace(/^\/{2,3}/, "").trim()
       : raw.replace(/^\/\*+/, "").replace(/\*+\/$/, "").trim();
-    const following = nextCodeLine(text, end, relativePath);
+    const following = nextCodeLine(text, end, relativePath, sourceFile);
 
     comments.push({
       relativePath,

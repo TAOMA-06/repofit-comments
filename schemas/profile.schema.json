@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TAOMA-06/repofit-comments/schemas/profile.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "type", "toolVersion", "rulePackVersion", "profile"],
+  "properties": {
+    "schemaVersion": { "const": "2.0" },
+    "type": { "const": "profile" },
+    "toolVersion": { "type": "string" },
+    "rulePackVersion": { "const": "1.0.0" },
+    "profile": { "$ref": "analysis-report.schema.json#/$defs/profile" }
+  }
+}

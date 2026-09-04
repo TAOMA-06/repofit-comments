@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TAOMA-06/repofit-comments/schemas/config.schema.json",
+  "title": "RepoFit Comments repository configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "rulePackVersion"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "rulePackVersion": { "const": "1.0.0" },
+    "include": { "$ref": "#/$defs/pathPatterns" },
+    "exclude": { "$ref": "#/$defs/pathPatterns" },
+    "protect": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "phrases": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 256 }
+        },
+        "paths": { "$ref": "#/$defs/pathPatterns" }
+      }
+    },
+    "rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "comments.action-narration": { "$ref": "#/$defs/ruleLevel" },
+        "comments.code-restatement": { "$ref": "#/$defs/ruleLevel" },
+        "comments.decorative-heading": { "$ref": "#/$defs/ruleLevel" },
+        "comments.density-outlier": { "$ref": "#/$defs/ruleLevel" },
+        "comments.language-drift": { "$ref": "#/$defs/ruleLevel" },
+        "comments.meta-narration": { "$ref": "#/$defs/ruleLevel" },
+        "comments.nearby-duplicate": { "$ref": "#/$defs/ruleLevel" },
+        "comments.step-label": { "$ref": "#/$defs/ruleLevel" },
+        "comments.step-narration": { "$ref": "#/$defs/ruleLevel" },
+        "comments.tutorial-tone": { "$ref": "#/$defs/ruleLevel" }
+      }
+    },
+    "failOn": { "enum": ["never", "info", "warning", "error"] },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxFiles": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "maxFileBytes": { "type": "integer", "minimum": 1, "maximum": 2097152 },
+        "maxTotalBytes": { "type": "integer", "minimum": 1, "maximum": 67108864 },
+        "maxChangedLines": { "type": "integer", "minimum": 1, "maximum": 100000 },
+        "maxFindings": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "maxProfileFiles": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "maxBackupBytes": { "type": "integer", "minimum": 1, "maximum": 2097152 },
+        "maxRecoveryRecords": { "type": "integer", "minimum": 1, "maximum": 200 },
+        "maxRecoveryBytes": { "type": "integer", "minimum": 1, "maximum": 67108864 }
+      }
+    },
+    "display": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "language": { "enum": ["auto", "en", "zh"] },
+        "format": { "enum": ["terminal", "json", "sarif"] }
+      }
+    }
+  },
+  "$defs": {
+    "ruleLevel": { "enum": ["off", "info", "warning", "error"] },
+    "pathPatterns": {
+      "type": "array",
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$" }
+    }
+  }
+}
