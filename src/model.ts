@@ -1,4 +1,5 @@
 export const REPORT_SCHEMA_VERSION = "1.0";
+export const RECEIPT_SCHEMA_VERSION = "2.0";
 
 export type Scope =
   | { kind: "staged" }
@@ -113,6 +114,8 @@ export interface FixReceipt {
   schemaVersion: string;
   findingIds: string[];
   relativePath: string;
+  analysisScope: Scope;
+  writeTarget: "worktree";
   appliedAt: string;
   beforeFileHash: string;
   afterFileHash: string;

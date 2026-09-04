@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { analyzeRepository } from "./analysis.js";
 import { discoverRepositoryRoot } from "./git.js";
-import type { Scope } from "./model.js";
+import type { FixReceipt, Scope } from "./model.js";
 import {
   applyFinding,
   applyFindings,
@@ -13,8 +15,51 @@ import {
   verifyLastFix,
 } from "./patch.js";
 import { renderFinding, renderProfile, renderReport } from "./report.js";
+import { sanitizeTerminalText } from "./terminal.js";
 
-const VERSION = "0.1.0";
+const PACKAGE_MANIFEST = JSON.parse(
+  readFileSync(fileURLToPath(new URL("../../package.json", import.meta.url)), "utf8"),
+) as { version?: unknown };
+if (typeof PACKAGE_MANIFEST.version !== "string") {
+  throw new Error("package.json does not contain a valid version.");
+}
+const VERSION = PACKAGE_MANIFEST.version;
+const ERROR_SCHEMA_VERSION = "1.0";
+const EXIT_USAGE = 2;
+const EXIT_RUNTIME = 3;
+const EXIT_VERIFY_FAILED = 4;
+const EXIT_WRITE_REFUSED = 5;
+
+type CliErrorCode = "invalid-arguments" | "analysis-failed" | "write-refused";
+
+class CliError extends Error {
+  constructor(
+    readonly code: CliErrorCode,
+    readonly exitCode: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "CliError";
+  }
+}
+
+function usageError(message: string): never {
+  throw new CliError("invalid-arguments", EXIT_USAGE, message);
+}
+
+function messageFrom(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function writeRefused(error: unknown): never {
+  throw new CliError("write-refused", EXIT_WRITE_REFUSED, messageFrom(error));
+}
+
+function wantsJsonOutput(argv: string[]): boolean {
+  return argv.some(
+    (argument, index) => argument === "--format" && argv[index + 1] === "json",
+  );
+}
 
 const HELP = `RepoFit Comments ${VERSION}
 
@@ -23,9 +68,9 @@ Usage:
   repofit comments check [scope] [--format terminal|json]
   repofit comments preview [scope]
   repofit comments explain <finding-id> [scope]
-  repofit comments fix <finding-id> [scope] [--dry-run|--apply]
-  repofit comments fix --all-safe [--file <path>] [scope] [--dry-run|--apply]
-  repofit comments verify
+  repofit comments fix <finding-id> --worktree [--dry-run|--apply]
+  repofit comments fix --all-safe [--file <path>] --worktree [--dry-run|--apply]
+  repofit comments verify [--worktree|--staged]
 
 Scopes (mutually exclusive; default: --staged):
   --staged             Analyze the Git index
@@ -41,8 +86,9 @@ Other options:
   --version            Show the version
 
 Safety:
-  check/preview are read-only and offline. fix writes either one deterministic finding or
-  one file's safe findings, verifies the full candidate in memory, and never stages or commits.
+  check/preview are read-only and offline. fix only accepts --worktree, writes either one
+  deterministic finding or one file's safe findings, and never stages or commits. After
+  staging a repaired file, use verify --staged to prove the index contains the repaired bytes.
 `;
 
 interface ParsedArguments {
@@ -55,6 +101,7 @@ interface ParsedArguments {
   dryRun: boolean;
   allSafe: boolean;
   file: string | undefined;
+  scopeExplicit: boolean;
 }
 
 function valueAfter(args: string[], index: number, flag: string): string {
@@ -75,7 +122,7 @@ function parseArguments(argv: string[]): ParsedArguments {
     process.exit(0);
   }
   if (argv[0] !== "comments") {
-    throw new Error("The MVP exposes the `comments` command group. Run with --help.");
+    throw new Error("RepoFit exposes the `comments` command group. Run with --help.");
   }
 
   const command = argv[1];
@@ -153,15 +200,42 @@ function parseArguments(argv: string[]): ParsedArguments {
   if ((allSafe || file !== undefined) && command !== "fix") {
     throw new Error("--all-safe and --file are only valid with comments fix.");
   }
+  if ((apply || dryRun) && command !== "fix") {
+    throw new Error("--apply and --dry-run are only valid with comments fix.");
+  }
   if (file !== undefined && !allSafe) {
     throw new Error("--file requires --all-safe.");
   }
   if (allSafe && positional.length > 0) {
     throw new Error("--all-safe cannot be combined with a finding ID.");
   }
+  if (command === "fix" && !allSafe && positional.length !== 1) {
+    throw new Error("comments fix requires exactly one finding ID or --all-safe.");
+  }
+  if (command === "explain" && positional.length !== 1) {
+    throw new Error("comments explain requires exactly one finding ID.");
+  }
+  if (
+    command !== "fix" &&
+    command !== "explain" &&
+    positional.length !== 0
+  ) {
+    throw new Error(`comments ${command} does not accept positional arguments.`);
+  }
 
   const scope: Scope = base !== undefined ? { kind: "base", ref: base } : worktree ? { kind: "worktree" } : { kind: "staged" };
-  return { command, positional, scope, format, cwd, apply, dryRun, allSafe, file };
+  return {
+    command,
+    positional,
+    scope,
+    format,
+    cwd,
+    apply,
+    dryRun,
+    allSafe,
+    file,
+    scopeExplicit: selectedScopes === 1,
+  };
 }
 
 function printJson(value: unknown): void {
@@ -169,21 +243,37 @@ function printJson(value: unknown): void {
 }
 
 function run(argv: string[]): number {
-  const parsed = parseArguments(argv);
+  let parsed: ParsedArguments;
+  try {
+    parsed = parseArguments(argv);
+  } catch (error) {
+    if (error instanceof CliError) throw error;
+    usageError(messageFrom(error));
+  }
   const root = discoverRepositoryRoot(parsed.cwd);
 
   if (parsed.command === "verify") {
-    const verification = verifyLastFix(root);
+    if (parsed.scope.kind === "base") {
+      usageError("comments verify supports only --worktree or --staged.");
+    }
+    const target = parsed.scopeExplicit ? parsed.scope.kind : "worktree";
+    const verification = verifyLastFix(root, target);
     if (parsed.format === "json") {
       printJson(verification);
     } else if (verification.valid) {
       process.stdout.write(
-        `Verified ${verification.receipt.findingIds.join(", ")} in ${verification.receipt.relativePath}.\n`,
+        `Verified ${verification.receipt.findingIds.map(sanitizeTerminalText).join(", ")} in ${sanitizeTerminalText(verification.receipt.relativePath)} (${verification.target}).\n`,
       );
     } else {
       process.stdout.write(`Verification failed:\n- ${verification.reasons.join("\n- ")}\n`);
     }
-    return verification.valid ? 0 : 4;
+    return verification.valid ? 0 : EXIT_VERIFY_FAILED;
+  }
+
+  if (parsed.command === "fix" && parsed.scope.kind !== "worktree") {
+    usageError(
+      "Automatic fixes only support --worktree. Use check or preview for staged/base changes, then re-run fix with --worktree and stage the verified result.",
+    );
   }
 
   const report = analyzeRepository(root, parsed.scope);
@@ -197,7 +287,7 @@ function run(argv: string[]): number {
   if (parsed.command === "check" || parsed.command === "preview") {
     if (parsed.format === "json") printJson(report);
     else process.stdout.write(`${renderReport(report, parsed.command === "preview")}\n`);
-    if (report.summary.parseErrorCount > 0) return 2;
+    if (report.summary.parseErrorCount > 0) return EXIT_RUNTIME;
     return report.findings.length > 0 ? 1 : 0;
   }
 
@@ -208,7 +298,7 @@ function run(argv: string[]): number {
         (parsed.file === undefined || candidate.relativePath === parsed.file),
     );
     if (safeFindings.length === 0) {
-      throw new Error(
+      writeRefused(
         parsed.file === undefined
           ? "No safe findings are available in the current diff."
           : `No safe findings are available for ${parsed.file} in the current diff.`,
@@ -216,7 +306,7 @@ function run(argv: string[]): number {
     }
     const files = new Set(safeFindings.map((finding) => finding.relativePath));
     if (files.size > 1) {
-      throw new Error(
+      usageError(
         `Safe findings span ${files.size} files. Re-run with --file <path> to choose one file.`,
       );
     }
@@ -227,24 +317,33 @@ function run(argv: string[]): number {
       );
       return 0;
     }
-    const receipt = applyFindings(root, safeFindings);
+    let receipt: FixReceipt;
+    try {
+      receipt = applyFindings(root, safeFindings, parsed.scope);
+    } catch (error) {
+      writeRefused(error);
+    }
     if (parsed.format === "json") printJson(receipt);
     else {
       process.stdout.write(
-        `Applied ${receipt.findingIds.length} safe findings to ${receipt.relativePath}. The file was not staged or committed.\n`,
+        `Applied ${receipt.findingIds.length} safe findings to ${sanitizeTerminalText(receipt.relativePath)}. The file was not staged or committed.\n`,
       );
-      process.stdout.write("Run `repofit comments verify` to verify the saved receipt.\n");
+      process.stdout.write(
+        "Run `repofit comments verify`, then stage the file and run `repofit comments verify --staged`.\n",
+      );
     }
     return 0;
   }
 
   const findingId = parsed.positional[0];
   if (!findingId) {
-    throw new Error(`${parsed.command} requires a finding ID.`);
+    usageError(`${parsed.command} requires a finding ID.`);
   }
   const finding = report.findings.find((candidate) => candidate.id === findingId);
   if (!finding) {
-    throw new Error(`Finding not found in the current ${parsed.scope.kind} diff: ${findingId}`);
+    const message = `Finding not found in the current ${parsed.scope.kind} diff: ${findingId}`;
+    if (parsed.command === "fix") writeRefused(message);
+    usageError(message);
   }
 
   if (parsed.command === "explain") {
@@ -259,24 +358,51 @@ function run(argv: string[]): number {
       process.stdout.write("Dry run only. Re-run with --apply to write this one finding.\n");
       return 0;
     }
-    const receipt = applyFinding(root, finding);
+    let receipt: FixReceipt;
+    try {
+      receipt = applyFinding(root, finding, parsed.scope);
+    } catch (error) {
+      writeRefused(error);
+    }
     if (parsed.format === "json") printJson(receipt);
     else {
       process.stdout.write(
-        `Applied ${finding.id} to ${finding.relativePath}. The file was not staged or committed.\n`,
+        `Applied ${sanitizeTerminalText(finding.id)} to ${sanitizeTerminalText(finding.relativePath)}. The file was not staged or committed.\n`,
       );
-      process.stdout.write("Run `repofit comments verify` to verify the saved receipt.\n");
+      process.stdout.write(
+        "Run `repofit comments verify`, then stage the file and run `repofit comments verify --staged`.\n",
+      );
     }
     return 0;
   }
 
-  throw new Error(`Unhandled command: ${parsed.command}`);
+  throw new CliError(
+    "analysis-failed",
+    EXIT_RUNTIME,
+    `Unhandled command: ${parsed.command}`,
+  );
 }
 
 try {
   process.exitCode = run(process.argv.slice(2));
 } catch (error) {
-  const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`RepoFit error: ${message}\n`);
-  process.exitCode = 2;
+  const cliError =
+    error instanceof CliError
+      ? error
+      : new CliError("analysis-failed", EXIT_RUNTIME, messageFrom(error));
+  if (wantsJsonOutput(process.argv.slice(2))) {
+    process.stderr.write(
+      `${JSON.stringify({
+        schemaVersion: ERROR_SCHEMA_VERSION,
+        type: "error",
+        tool: "repofit-comments",
+        toolVersion: VERSION,
+        error: { code: cliError.code, message: cliError.message },
+        exitCode: cliError.exitCode,
+      })}\n`,
+    );
+  } else {
+    process.stderr.write(`RepoFit error: ${sanitizeTerminalText(cliError.message)}\n`);
+  }
+  process.exitCode = cliError.exitCode;
 }

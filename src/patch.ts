@@ -18,11 +18,17 @@ import {
   parseErrorCount,
   syntaxTreeHash,
 } from "./analyzer.js";
-import { getAbsoluteGitDirectory, readWorkingTreeContent } from "./git.js";
+import {
+  getAbsoluteGitDirectory,
+  readIndexContent,
+  readWorkingTreeContent,
+  resolveSafeWorkingTreePath,
+} from "./git.js";
 import { sha256 } from "./hash.js";
-import type { Finding, FixReceipt } from "./model.js";
-import { REPORT_SCHEMA_VERSION } from "./model.js";
+import type { Finding, FixReceipt, Scope } from "./model.js";
+import { RECEIPT_SCHEMA_VERSION } from "./model.js";
 import { protectedCommentHash } from "./protection.js";
+import { sanitizeTerminalText } from "./terminal.js";
 
 export interface CandidateVerification {
   valid: boolean;
@@ -146,10 +152,10 @@ export function previewFinding(finding: Finding): string {
   const replacement =
     finding.action === "remove-safe" ? "(remove comment)" : finding.suggestedReplacement;
   return [
-    `--- ${finding.relativePath}:${finding.line}`,
-    `+++ ${finding.relativePath}:${finding.line}`,
-    `- ${finding.original}`,
-    `+ ${replacement ?? "(no automatic replacement)"}`,
+    `--- ${sanitizeTerminalText(finding.relativePath)}:${finding.line}`,
+    `+++ ${sanitizeTerminalText(finding.relativePath)}:${finding.line}`,
+    `- ${sanitizeTerminalText(finding.original)}`,
+    `+ ${sanitizeTerminalText(replacement ?? "(no automatic replacement)")}`,
   ].join("\n");
 }
 
@@ -167,7 +173,8 @@ function writeReceipt(root: string, receipt: FixReceipt): void {
   writeFileSync(path, `${JSON.stringify(receipt, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
 }
 
-function atomicWrite(path: string, content: string): void {
+function atomicWrite(root: string, relativePath: string, content: string): void {
+  const path = resolveSafeWorkingTreePath(root, relativePath);
   const directory = dirname(path);
   const temporaryPath = join(
     directory,
@@ -195,7 +202,16 @@ function atomicWrite(path: string, content: string): void {
   }
 }
 
-export function applyFindings(root: string, findings: Finding[]): FixReceipt {
+export function applyFindings(
+  root: string,
+  findings: Finding[],
+  analysisScope: Scope = { kind: "worktree" },
+): FixReceipt {
+  if (analysisScope.kind !== "worktree") {
+    throw new Error(
+      "Automatic fixes only support --worktree. Staged and base scopes are read-only.",
+    );
+  }
   const first = findings[0];
   if (!first) {
     throw new Error("At least one safe finding is required.");
@@ -231,11 +247,13 @@ export function applyFindings(root: string, findings: Finding[]): FixReceipt {
     );
   }
 
-  atomicWrite(join(root, first.relativePath), candidate);
+  atomicWrite(root, first.relativePath, candidate);
   const receipt: FixReceipt = {
-    schemaVersion: REPORT_SCHEMA_VERSION,
+    schemaVersion: RECEIPT_SCHEMA_VERSION,
     findingIds: findings.map((finding) => finding.id),
     relativePath: first.relativePath,
+    analysisScope,
+    writeTarget: "worktree",
     appliedAt: new Date().toISOString(),
     beforeFileHash: first.sourceHash,
     afterFileHash: sha256(candidate),
@@ -247,17 +265,32 @@ export function applyFindings(root: string, findings: Finding[]): FixReceipt {
   return receipt;
 }
 
-export function applyFinding(root: string, finding: Finding): FixReceipt {
-  return applyFindings(root, [finding]);
+export function applyFinding(
+  root: string,
+  finding: Finding,
+  analysisScope: Scope = { kind: "worktree" },
+): FixReceipt {
+  return applyFindings(root, [finding], analysisScope);
 }
 
-export function verifyLastFix(root: string): { valid: boolean; reasons: string[]; receipt: FixReceipt } {
+export function verifyLastFix(
+  root: string,
+  target: "worktree" | "staged" = "worktree",
+): { valid: boolean; reasons: string[]; receipt: FixReceipt; target: "worktree" | "staged" } {
   const path = receiptPath(root);
   if (!existsSync(path)) {
     throw new Error("No RepoFit fix receipt found in this repository.");
   }
   const receipt = JSON.parse(readFileSync(path, "utf8")) as FixReceipt;
-  const current = readWorkingTreeContent(root, receipt.relativePath);
+  if (receipt.schemaVersion !== RECEIPT_SCHEMA_VERSION) {
+    throw new Error(
+      `Unsupported fix receipt schema: ${receipt.schemaVersion ?? "(missing)"}. Re-run the fix with this RepoFit version.`,
+    );
+  }
+  const current =
+    target === "staged"
+      ? readIndexContent(root, receipt.relativePath)
+      : readWorkingTreeContent(root, receipt.relativePath);
   const reasons: string[] = [];
 
   if (sha256(current) !== receipt.afterFileHash) {
@@ -279,5 +312,5 @@ export function verifyLastFix(root: string): { valid: boolean; reasons: string[]
     reasons.push("The current file has parse diagnostics.");
   }
 
-  return { valid: reasons.length === 0, reasons, receipt };
+  return { valid: reasons.length === 0, reasons, receipt, target };
 }

@@ -1,6 +1,7 @@
 import type { AnalysisReport, Finding, StyleProfile } from "./model.js";
 import { scopeLabel } from "./git.js";
 import { previewFinding } from "./patch.js";
+import { sanitizeTerminalText } from "./terminal.js";
 
 export function renderProfile(profile: StyleProfile): string {
   const density = (profile.commentDensity * 100).toFixed(1);
@@ -16,17 +17,17 @@ export function renderProfile(profile: StyleProfile): string {
 
 export function renderFinding(finding: Finding, includePreview = false): string {
   const lines = [
-    `[${finding.action}] ${finding.id} ${finding.ruleId}`,
-    `  at ${finding.relativePath}:${finding.line}`,
-    `  ${finding.original}`,
-    `  Why: ${finding.reason}`,
+    `[${sanitizeTerminalText(finding.action)}] ${sanitizeTerminalText(finding.id)} ${sanitizeTerminalText(finding.ruleId)}`,
+    `  at ${sanitizeTerminalText(finding.relativePath)}:${finding.line}`,
+    `  ${sanitizeTerminalText(finding.original)}`,
+    `  Why: ${sanitizeTerminalText(finding.reason)}`,
   ];
 
   if (finding.suggestedReplacement) {
-    lines.push(`  Suggestion: ${finding.suggestedReplacement}`);
+    lines.push(`  Suggestion: ${sanitizeTerminalText(finding.suggestedReplacement)}`);
   }
   for (const evidence of finding.evidence.slice(0, 2)) {
-    lines.push(`  Evidence: ${evidence}`);
+    lines.push(`  Evidence: ${sanitizeTerminalText(evidence)}`);
   }
   if (includePreview) {
     lines.push("", previewFinding(finding));
@@ -40,7 +41,7 @@ export function renderReport(report: AnalysisReport, includePreview = false): st
   const lines = [
     "RepoFit Comments",
     "AI-style means a presentation pattern, not proof of authorship.",
-    `Scope: ${scopeLabel(report.scope)}`,
+    `Scope: ${sanitizeTerminalText(scopeLabel(report.scope))}`,
     `Files analyzed: ${report.summary.analyzedFileCount}`,
     `Changed comments: ${report.summary.changedCommentCount}`,
     `Protected comments: ${report.summary.protectedCommentCount}`,

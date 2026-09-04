@@ -19,6 +19,7 @@
   "files": [
     "dist/src",
     "README.md",
+    "CHANGELOG.md",
     "STATUS.md",
     "evidence"
   ],

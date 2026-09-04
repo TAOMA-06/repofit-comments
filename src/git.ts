@@ -1,24 +1,122 @@
-import { lstatSync, readFileSync } from "node:fs";
-import { resolve, sep } from "node:path";
+import { lstatSync, readFileSync, realpathSync } from "node:fs";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
+import { isSupportedSourcePath, wholeFileProtectionReason } from "./file-policy.js";
 import { sha256 } from "./hash.js";
 import type { LineRange, Scope, ScopedFile } from "./model.js";
 
 const MAX_GIT_OUTPUT = 64 * 1024 * 1024;
+const GIT_TIMEOUT_MS = 30_000;
 
-function runGit(root: string, args: string[], allowFailure = false): string {
-  const result = spawnSync("git", args, {
-    cwd: root,
-    encoding: "utf8",
-    maxBuffer: MAX_GIT_OUTPUT,
-  });
+const BLOCKED_GIT_ENVIRONMENT_KEYS = new Set([
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_ASKPASS",
+  "GIT_COMMON_DIR",
+  "GIT_CONFIG",
+  "GIT_DIFF_OPTS",
+  "GIT_DIR",
+  "GIT_EXEC_PATH",
+  "GIT_EXTERNAL_DIFF",
+  "GIT_INDEX_FILE",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_PROXY_COMMAND",
+  "GIT_REPLACE_REF_BASE",
+  "GIT_SSH",
+  "GIT_SSH_COMMAND",
+  "GIT_WORK_TREE",
+  "SSH_ASKPASS",
+]);
 
-  if (result.error) {
-    throw new Error(`Unable to run git: ${result.error.message}`);
+function gitEnvironment(): NodeJS.ProcessEnv {
+  const environment: NodeJS.ProcessEnv = {};
+
+  for (const [key, value] of Object.entries(process.env)) {
+    const normalizedKey = key.toUpperCase();
+    if (
+      BLOCKED_GIT_ENVIRONMENT_KEYS.has(normalizedKey) ||
+      normalizedKey.startsWith("GIT_CONFIG_") ||
+      normalizedKey.startsWith("GIT_TRACE")
+    ) {
+      continue;
+    }
+    environment[key] = value;
   }
 
-  if (result.status !== 0 && !allowFailure) {
+  return {
+    ...environment,
+    GIT_LITERAL_PATHSPECS: "1",
+    GIT_NO_LAZY_FETCH: "1",
+    GIT_NO_REPLACE_OBJECTS: "1",
+    GIT_OPTIONAL_LOCKS: "0",
+    GIT_PAGER: "cat",
+    GIT_TERMINAL_PROMPT: "0",
+    PAGER: "cat",
+  };
+}
+
+interface GitProcessResult {
+  status: number | null;
+  signal: NodeJS.Signals | null;
+  stdout: string;
+  stderr: string;
+}
+
+function decodeUtf8(value: Uint8Array, context: string): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(value);
+  } catch {
+    throw new Error(`${context} is not valid UTF-8; RepoFit refused to analyze it.`);
+  }
+}
+
+function spawnGit(root: string, args: string[]): GitProcessResult {
+  const result = spawnSync(
+    "git",
+    [
+      "--no-pager",
+      "--no-optional-locks",
+      "-c",
+      "core.fsmonitor=false",
+      "-c",
+      "diff.external=",
+      ...args,
+    ],
+    {
+      cwd: root,
+      env: gitEnvironment(),
+      killSignal: "SIGKILL",
+      maxBuffer: MAX_GIT_OUTPUT,
+      timeout: GIT_TIMEOUT_MS,
+      windowsHide: true,
+    },
+  );
+
+  if (result.error) {
+    const error = result.error as NodeJS.ErrnoException;
+    if (error.code === "ETIMEDOUT") {
+      throw new Error(
+        `git ${args[0] ?? "command"} timed out after ${GIT_TIMEOUT_MS}ms. Retry with a smaller diff or check Git repository health.`,
+      );
+    }
+    throw new Error(`Unable to run git: ${error.message}`);
+  }
+
+  if (result.signal) {
+    throw new Error(`git ${args[0] ?? "command"} was terminated by ${result.signal}.`);
+  }
+
+  return {
+    status: result.status,
+    signal: result.signal,
+    stdout: decodeUtf8(result.stdout, `git ${args[0] ?? "command"} stdout`),
+    stderr: decodeUtf8(result.stderr, `git ${args[0] ?? "command"} stderr`),
+  };
+}
+
+function runGit(root: string, args: string[]): string {
+  const result = spawnGit(root, args);
+  if (result.status !== 0) {
     const detail = (result.stderr || result.stdout || "unknown git error").trim();
     throw new Error(`git ${args[0] ?? "command"} failed: ${detail}`);
   }
@@ -52,22 +150,18 @@ function resolveBase(root: string, ref: string): string {
 function diffPrefix(root: string, scope: Scope): string[] {
   switch (scope.kind) {
     case "staged":
-      return ["diff", "--cached"];
+      return ["diff", "--no-ext-diff", "--no-textconv", "--cached"];
     case "worktree":
-      return ["diff"];
+      return ["diff", "--no-ext-diff", "--no-textconv"];
     case "base":
-      return ["diff", resolveBase(root, scope.ref), "HEAD"];
+      return [
+        "diff",
+        "--no-ext-diff",
+        "--no-textconv",
+        resolveBase(root, scope.ref),
+        "HEAD",
+      ];
   }
-}
-
-function isSupportedPath(relativePath: string): boolean {
-  if (!/\.tsx?$/i.test(relativePath) || /\.d\.ts$/i.test(relativePath)) {
-    return false;
-  }
-
-  return !/(^|\/)(?:node_modules|vendor|dist|build|coverage|generated|fixtures?)(?:\/|$)/i.test(
-    relativePath,
-  ) && !/(?:\.generated|\.min)\.tsx?$/i.test(relativePath);
 }
 
 function splitNullTerminated(value: string): string[] {
@@ -76,9 +170,28 @@ function splitNullTerminated(value: string): string[] {
 
 function assertRepositoryPath(root: string, relativePath: string): string {
   const absolutePath = resolve(root, relativePath);
-  const expectedPrefix = root.endsWith(sep) ? root : `${root}${sep}`;
-  if (absolutePath !== root && !absolutePath.startsWith(expectedPrefix)) {
+  const relativeToRoot = relative(resolve(root), absolutePath);
+  if (
+    relativeToRoot === ".." ||
+    relativeToRoot.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) ||
+    isAbsolute(relativeToRoot)
+  ) {
     throw new Error(`Refusing path outside repository: ${relativePath}`);
+  }
+  return absolutePath;
+}
+
+function assertSafeWorkingTreePath(root: string, relativePath: string): string {
+  const absolutePath = assertRepositoryPath(root, relativePath);
+  const realRoot = realpathSync(root);
+  const realParent = realpathSync(dirname(absolutePath));
+  const parentFromRoot = relative(realRoot, realParent);
+  if (
+    parentFromRoot === ".." ||
+    parentFromRoot.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) ||
+    isAbsolute(parentFromRoot)
+  ) {
+    throw new Error(`Refusing path whose parent resolves outside repository: ${relativePath}`);
   }
   return absolutePath;
 }
@@ -92,18 +205,23 @@ export function listScopedPaths(root: string, scope: Scope): string[] {
     "--",
   ]);
 
-  return splitNullTerminated(output).filter(isSupportedPath).sort();
+  return splitNullTerminated(output).filter(isSupportedSourcePath).sort();
 }
 
 function readScopedContent(root: string, scope: Scope, relativePath: string): string {
   switch (scope.kind) {
     case "staged":
-      return runGit(root, ["show", `:${relativePath}`]);
+      return readIndexContent(root, relativePath);
     case "worktree":
       return readWorkingTreeContent(root, relativePath);
     case "base":
       return runGit(root, ["show", `HEAD:${relativePath}`]);
   }
+}
+
+export function readIndexContent(root: string, relativePath: string): string {
+  assertRepositoryPath(root, relativePath);
+  return runGit(root, ["show", `:${relativePath}`]);
 }
 
 function readFileDiff(root: string, scope: Scope, relativePath: string): string {
@@ -139,6 +257,9 @@ export function parseAddedLineRanges(diff: string): LineRange[] {
 export function collectScopedFiles(root: string, scope: Scope): ScopedFile[] {
   return listScopedPaths(root, scope).flatMap((relativePath) => {
     const content = readScopedContent(root, scope, relativePath);
+    if (wholeFileProtectionReason(relativePath, content) !== undefined) {
+      return [];
+    }
     const addedRanges = parseAddedLineRanges(readFileDiff(root, scope, relativePath));
     if (addedRanges.length === 0) {
       return [];
@@ -158,16 +279,12 @@ export function collectScopedFiles(root: string, scope: Scope): ScopedFile[] {
 
 export function listTrackedSourceFiles(root: string): string[] {
   return splitNullTerminated(runGit(root, ["ls-files", "-z", "--"]))
-    .filter(isSupportedPath)
+    .filter(isSupportedSourcePath)
     .sort();
 }
 
 export function readHeadContent(root: string, relativePath: string): string | undefined {
-  const result = spawnSync("git", ["show", `HEAD:${relativePath}`], {
-    cwd: root,
-    encoding: "utf8",
-    maxBuffer: MAX_GIT_OUTPUT,
-  });
+  const result = spawnGit(root, ["show", `HEAD:${relativePath}`]);
 
   if (result.status !== 0) {
     return undefined;
@@ -176,10 +293,17 @@ export function readHeadContent(root: string, relativePath: string): string | un
 }
 
 export function readWorkingTreeContent(root: string, relativePath: string): string {
-  const absolutePath = assertRepositoryPath(root, relativePath);
+  const absolutePath = assertSafeWorkingTreePath(root, relativePath);
   const metadata = lstatSync(absolutePath);
   if (metadata.isSymbolicLink() || !metadata.isFile()) {
     throw new Error(`Refusing to read or rewrite a non-regular source file: ${relativePath}`);
   }
-  return readFileSync(absolutePath, "utf8");
+  return decodeUtf8(
+    readFileSync(absolutePath),
+    `Working-tree file ${relativePath}`,
+  );
+}
+
+export function resolveSafeWorkingTreePath(root: string, relativePath: string): string {
+  return assertSafeWorkingTreePath(root, relativePath);
 }

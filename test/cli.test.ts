@@ -18,7 +18,7 @@ function git(root: string, args: string[]): string {
   return execFileSync("git", args, { cwd: root, encoding: "utf8" });
 }
 
-test("CLI checks, previews, applies, and verifies one staged comment fix", () => {
+test("CLI checks, previews, applies, and verifies one worktree comment fix", () => {
   const root = mkdtempSync(join(tmpdir(), "repofit-comments-test-"));
   try {
     git(root, ["init", "-q"]);
@@ -44,11 +44,9 @@ test("CLI checks, previews, applies, and verifies one staged comment fix", () =>
       "  // Main Logic\n  // Increment value\n  value++;\n  return result;",
     );
     writeFileSync(path, changed);
-    git(root, ["add", "counter.ts"]);
-
     const checked = spawnSync(
       process.execPath,
-      [cliPath, "comments", "check", "--staged", "--format", "json"],
+      [cliPath, "comments", "check", "--worktree", "--format", "json"],
       { cwd: root, encoding: "utf8" },
     );
     assert.equal(checked.status, 1, checked.stderr);
@@ -61,7 +59,7 @@ test("CLI checks, previews, applies, and verifies one staged comment fix", () =>
 
     const dryRun = spawnSync(
       process.execPath,
-      [cliPath, "comments", "fix", finding.id, "--staged", "--dry-run"],
+      [cliPath, "comments", "fix", finding.id, "--worktree", "--dry-run"],
       { cwd: root, encoding: "utf8" },
     );
     assert.equal(dryRun.status, 0, dryRun.stderr);
@@ -70,7 +68,7 @@ test("CLI checks, previews, applies, and verifies one staged comment fix", () =>
 
     const applied = spawnSync(
       process.execPath,
-      [cliPath, "comments", "fix", finding.id, "--staged", "--apply"],
+      [cliPath, "comments", "fix", finding.id, "--worktree", "--apply"],
       { cwd: root, encoding: "utf8" },
     );
     assert.equal(applied.status, 0, applied.stderr);
@@ -85,6 +83,23 @@ test("CLI checks, previews, applies, and verifies one staged comment fix", () =>
     });
     assert.equal(verified.status, 0, verified.stderr || verified.stdout);
     assert.match(verified.stdout, /Verified/);
+
+    const notYetStaged = spawnSync(
+      process.execPath,
+      [cliPath, "comments", "verify", "--staged"],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert.equal(notYetStaged.status, 4, notYetStaged.stderr || notYetStaged.stdout);
+    assert.match(notYetStaged.stdout, /no longer matches the applied patch receipt/);
+
+    git(root, ["add", "counter.ts"]);
+    const stagedVerified = spawnSync(
+      process.execPath,
+      [cliPath, "comments", "verify", "--staged"],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert.equal(stagedVerified.status, 0, stagedVerified.stderr || stagedVerified.stdout);
+    assert.match(stagedVerified.stdout, /\(staged\)/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -115,11 +130,9 @@ test("CLI applies a deterministic step-prefix rewrite without changing code", ()
       "  // Step 1: sum all values into the total.\n  return values.reduce",
     );
     writeFileSync(path, changed);
-    git(root, ["add", "pricing.ts"]);
-
     const checked = spawnSync(
       process.execPath,
-      [cliPath, "comments", "check", "--staged", "--format", "json"],
+      [cliPath, "comments", "check", "--worktree", "--format", "json"],
       { cwd: root, encoding: "utf8" },
     );
     assert.equal(checked.status, 1, checked.stderr);
@@ -129,7 +142,7 @@ test("CLI applies a deterministic step-prefix rewrite without changing code", ()
 
     const applied = spawnSync(
       process.execPath,
-      [cliPath, "comments", "fix", finding.id, "--staged", "--apply"],
+      [cliPath, "comments", "fix", finding.id, "--worktree", "--apply"],
       { cwd: root, encoding: "utf8" },
     );
     assert.equal(applied.status, 0, applied.stderr);
@@ -170,11 +183,9 @@ test("CLI applies every safe finding in one file as one verified transaction", (
       )
       .replace("  return subtotal;", "  // Step 2: return the subtotal.\n  return subtotal;");
     writeFileSync(path, changed);
-    git(root, ["add", "pricing.ts"]);
-
     const dryRun = spawnSync(
       process.execPath,
-      [cliPath, "comments", "fix", "--all-safe", "--file", "pricing.ts", "--staged"],
+      [cliPath, "comments", "fix", "--all-safe", "--file", "pricing.ts", "--worktree"],
       { cwd: root, encoding: "utf8" },
     );
     assert.equal(dryRun.status, 0, dryRun.stderr);
@@ -190,7 +201,7 @@ test("CLI applies every safe finding in one file as one verified transaction", (
         "--all-safe",
         "--file",
         "pricing.ts",
-        "--staged",
+        "--worktree",
         "--apply",
       ],
       { cwd: root, encoding: "utf8" },
@@ -321,11 +332,9 @@ test("CLI refuses to apply suggestion-only findings", () => {
       "  // Here we return the computed value\n  return value;",
     );
     writeFileSync(path, changed);
-    git(root, ["add", "suggestion.ts"]);
-
     const checked = spawnSync(
       process.execPath,
-      [cliPath, "comments", "check", "--staged", "--format", "json"],
+      [cliPath, "comments", "check", "--worktree", "--format", "json"],
       { cwd: root, encoding: "utf8" },
     );
     const report = JSON.parse(checked.stdout) as AnalysisReport;
@@ -334,12 +343,56 @@ test("CLI refuses to apply suggestion-only findings", () => {
 
     const applied = spawnSync(
       process.execPath,
+      [cliPath, "comments", "fix", finding.id, "--worktree", "--apply"],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert.equal(applied.status, 5);
+    assert.match(applied.stderr, /not eligible for an automatic comment fix/);
+    assert.equal(readFileSync(path, "utf8"), changed);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("CLI refuses staged automatic fixes so the index cannot retain stale comments", () => {
+  const root = mkdtempSync(join(tmpdir(), "repofit-comments-staged-fix-test-"));
+  try {
+    git(root, ["init", "-q"]);
+    git(root, ["config", "user.email", "repofit@example.invalid"]);
+    git(root, ["config", "user.name", "RepoFit Test"]);
+    const path = join(root, "staged.ts");
+    const baseline = [
+      "export function value(): number {",
+      "  const answer = 42;",
+      "  return answer;",
+      "}",
+      "",
+    ].join("\n");
+    writeFileSync(path, baseline);
+    git(root, ["add", "staged.ts"]);
+    git(root, ["commit", "-qm", "baseline"]);
+    const changed = baseline.replace("  return answer;", "  // Main Logic\n  return answer;");
+    writeFileSync(path, changed);
+    git(root, ["add", "staged.ts"]);
+
+    const checked = spawnSync(
+      process.execPath,
+      [cliPath, "comments", "check", "--staged", "--format", "json"],
+      { cwd: root, encoding: "utf8" },
+    );
+    const report = JSON.parse(checked.stdout) as AnalysisReport;
+    const finding = report.findings[0];
+    assert.ok(finding);
+
+    const applied = spawnSync(
+      process.execPath,
       [cliPath, "comments", "fix", finding.id, "--staged", "--apply"],
       { cwd: root, encoding: "utf8" },
     );
     assert.equal(applied.status, 2);
-    assert.match(applied.stderr, /not eligible for an automatic comment fix/);
+    assert.match(applied.stderr, /only support --worktree/);
     assert.equal(readFileSync(path, "utf8"), changed);
+    assert.equal(git(root, ["show", ":staged.ts"]), changed);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -354,6 +407,78 @@ test("CLI rejects mutually exclusive scope flags before reading a repository", (
 
   assert.equal(result.status, 2);
   assert.match(result.stderr, /mutually exclusive/);
+});
+
+test("CLI rejects irrelevant flags and positional arguments", () => {
+  const irrelevantFlag = spawnSync(
+    process.execPath,
+    [cliPath, "comments", "check", "--apply"],
+    { encoding: "utf8" },
+  );
+  assert.equal(irrelevantFlag.status, 2);
+  assert.match(irrelevantFlag.stderr, /only valid with comments fix/);
+
+  const extraPosition = spawnSync(
+    process.execPath,
+    [cliPath, "comments", "verify", "unexpected"],
+    { encoding: "utf8" },
+  );
+  assert.equal(extraPosition.status, 2);
+  assert.match(extraPosition.stderr, /does not accept positional arguments/);
+
+  const extraFinding = spawnSync(
+    process.execPath,
+    [cliPath, "comments", "fix", "one", "two", "--worktree"],
+    { encoding: "utf8" },
+  );
+  assert.equal(extraFinding.status, 2);
+  assert.match(extraFinding.stderr, /exactly one finding ID/);
+});
+
+test("CLI emits versioned JSON errors with stable exit categories", () => {
+  const usage = spawnSync(
+    process.execPath,
+    [cliPath, "comments", "check", "unexpected", "--format", "json"],
+    { encoding: "utf8" },
+  );
+  assert.equal(usage.status, 2);
+  const usagePayload = JSON.parse(usage.stderr) as {
+    schemaVersion: string;
+    type: string;
+    toolVersion: string;
+    error: { code: string; message: string };
+    exitCode: number;
+  };
+  assert.equal(usagePayload.schemaVersion, "1.0");
+  assert.equal(usagePayload.type, "error");
+  assert.match(usagePayload.toolVersion, /^\d+\.\d+\.\d+/);
+  assert.equal(usagePayload.error.code, "invalid-arguments");
+  assert.equal(usagePayload.exitCode, 2);
+
+  const runtime = spawnSync(
+    process.execPath,
+    [cliPath, "comments", "check", "--format", "json"],
+    { cwd: tmpdir(), encoding: "utf8" },
+  );
+  assert.equal(runtime.status, 3);
+  const runtimePayload = JSON.parse(runtime.stderr) as {
+    error: { code: string };
+    exitCode: number;
+  };
+  assert.equal(runtimePayload.error.code, "analysis-failed");
+  assert.equal(runtimePayload.exitCode, 3);
+});
+
+test("CLI version comes from package.json", () => {
+  const result = spawnSync(process.execPath, [cliPath, "--version"], {
+    encoding: "utf8",
+  });
+  const packageManifest = JSON.parse(
+    readFileSync(fileURLToPath(new URL("../../package.json", import.meta.url)), "utf8"),
+  ) as { version: string };
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), packageManifest.version);
 });
 
 test("working-tree reads refuse symbolic links", () => {

@@ -1,6 +1,7 @@
 import { dirname } from "node:path";
 
 import { countCodeLines, extractComments } from "./analyzer.js";
+import { wholeFileProtectionReason } from "./file-policy.js";
 import { listTrackedSourceFiles, readHeadContent } from "./git.js";
 import type { StyleProfile } from "./model.js";
 import { commentLanguage, normalizeComment, protectedReason } from "./protection.js";
@@ -42,6 +43,9 @@ export function buildStyleProfile(root: string, changedPaths: string[]): StylePr
   for (const relativePath of candidates) {
     const content = readHeadContent(root, relativePath);
     if (content === undefined) {
+      continue;
+    }
+    if (wholeFileProtectionReason(relativePath, content) !== undefined) {
       continue;
     }
 
