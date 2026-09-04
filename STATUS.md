@@ -64,6 +64,8 @@ Grok 4.5 with low reasoning generated four TypeScript/test files in a separate f
 
 See [evidence/grok-4.5-eval-2026-09-03.md](./evidence/grok-4.5-eval-2026-09-03.md) and [evidence/trusted-fix-core-2026-09-04.md](./evidence/trusted-fix-core-2026-09-04.md).
 
+The current v1 technical-candidate checks, exact artifact identities, and external blockers are recorded in [evidence/v1-technical-candidate-2026-09-04.md](./evidence/v1-technical-candidate-2026-09-04.md).
+
 ## Public-repository smoke evidence
 
 Read-only historical scans were run on two public repositories after the deterministic test suite passed:
