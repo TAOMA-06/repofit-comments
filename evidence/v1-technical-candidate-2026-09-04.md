@@ -31,9 +31,18 @@ The evidence document and composite Action implementation are not included in th
 
 ## Model-generated fixture boundary
 
-The previously frozen Grok 4.5 low-effort fixture remains the live model-generated evidence: 38 changed comments, 26 protected comments, four safe `Step N:` rewrites, verified tokens/AST/protected rationale, zero remaining findings, and 4/4 project tests. That replay is documented in `grok-4.5-eval-2026-09-03.md` and `trusted-fix-core-2026-09-04.md`.
+The frozen Grok 4.5 low-effort repository was recovered from its original local Git history and replayed with the final installed `1.0.0-rc.1` tarball. An isolated checkout kept the human stub `681fa1d` as `HEAD` and restored the unmodified Grok commit `007756c` into the worktree.
 
-A fresh Grok 4.5 generation was attempted for this RC in a new isolated fixture. The CLI reached the service but returned HTTP 402 `Grok Build usage balance exhausted`; therefore no new model output or RC-specific Grok replay is claimed. The current installed-tarball smoke is real, but it is not relabeled as a Grok result.
+- The raw model source passed strict TypeScript checking and all 4 functional tests.
+- The RC reported 4 analyzed files, 38 changed comments, 26 protected comments, four safe `Step N:` rewrites, zero suggestions, and zero parse errors.
+- One file transaction changed `src/pricing.ts` from SHA-256 `fc677ed6ed3e1d65d8a6b8eee8e98dae89134a5345931d435d723e1f1d08877c` to `e7b3190f116fbea4bf24ae4d6fa95e865fb95b07cb41dadac74d5be249933bc2`.
+- Worktree verification and staged verification passed. `undo` restored the exact raw hash while leaving the staged repaired hash unchanged; a second apply returned the worktree to the repaired hash and both verification modes passed again.
+- The staged repaired file and the three remaining worktree files together contained all 38 comments, protected 27 after the useful rewritten rationale became eligible for protection, and produced zero remaining findings or parse errors.
+- Strict checking and all 4 functional tests passed after the final repair.
+
+The earlier Alpha and Trusted Fix Core runs are documented in `grok-4.5-eval-2026-09-03.md` and `trusted-fix-core-2026-09-04.md`.
+
+A separate attempt to ask Grok 4.5 to generate a brand-new sample reached the service but returned HTTP 402 `Grok Build usage balance exhausted`. No new generation is claimed; the RC replay above uses the already-frozen authentic Grok output rather than substituting hand-written code.
 
 ## External gates not claimed
 

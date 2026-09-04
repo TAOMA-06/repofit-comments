@@ -61,6 +61,7 @@ Grok 4.5 with low reasoning generated four TypeScript/test files in a separate f
 - The generated project passed strict type checking and all four functional tests before and after cleanup.
 - A post-cleanup scan reported zero remaining findings.
 - The v0.2 Trusted Fix Core replay additionally verified worktree apply, staged verification, exact undo without index mutation, re-apply, and the same 4/4 functional tests.
+- The final installed `1.0.0-rc.1` tarball repeated the frozen raw Grok commit replay: 38 comments, 26 protected comments, four safe rewrites, worktree/staged verification, exact undo with index isolation, re-apply, zero remaining findings across the staged/worktree split, and 4/4 tests. A request for a brand-new Grok sample was blocked by HTTP 402 exhausted usage; it was not substituted or counted as new model evidence.
 
 See [evidence/grok-4.5-eval-2026-09-03.md](./evidence/grok-4.5-eval-2026-09-03.md) and [evidence/trusted-fix-core-2026-09-04.md](./evidence/trusted-fix-core-2026-09-04.md).
 
