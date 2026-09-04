@@ -6,12 +6,19 @@ import { fileURLToPath } from "node:url";
 
 import { analyzeRepository } from "./analysis.js";
 import { discoverRepositoryRoot } from "./git.js";
-import type { FixReceipt, Scope } from "./model.js";
+import {
+  REPORT_SCHEMA_VERSION,
+  type Finding,
+  type FixReceipt,
+  type Scope,
+} from "./model.js";
 import {
   applyFinding,
   applyFindings,
   previewFinding,
   previewFindings,
+  recoverLastFix,
+  undoLastFix,
   verifyLastFix,
 } from "./patch.js";
 import { renderFinding, renderProfile, renderReport } from "./report.js";
@@ -71,11 +78,18 @@ Usage:
   repofit comments fix <finding-id> --worktree [--dry-run|--apply]
   repofit comments fix --all-safe [--file <path>] --worktree [--dry-run|--apply]
   repofit comments verify [--worktree|--staged]
+  repofit comments recover
+  repofit comments undo
 
-Scopes (mutually exclusive; default: --staged):
+Analysis scopes (mutually exclusive; default for profile/check/preview/explain: --staged):
   --staged             Analyze the Git index
   --worktree           Analyze unstaged working-tree changes
   --base <ref>         Analyze merge-base(ref, HEAD)..HEAD
+
+Command-specific scope:
+  fix                   Requires --worktree
+  verify                Accepts --worktree or --staged; defaults to --worktree
+  recover/undo          Use the latest worktree journal and accept no scope flag
 
 Other options:
   --format <value>     terminal (default) or json
@@ -86,23 +100,48 @@ Other options:
   --version            Show the version
 
 Safety:
-  check/preview are read-only and offline. fix only accepts --worktree, writes either one
-  deterministic finding or one file's safe findings, and never stages or commits. After
-  staging a repaired file, use verify --staged to prove the index contains the repaired bytes.
+  profile/check/preview/explain/verify are read-only and offline. fix --apply changes one
+  worktree file after writing recovery data. recover may reconcile an interrupted source
+  replacement and updates its journal. undo restores the latest applied journal to the
+  worktree. No command stages, commits, or pushes; verify --staged only reads the index.
 `;
 
-interface ParsedArguments {
-  command: string;
-  positional: string[];
-  scope: Scope;
+interface CommonArguments {
   format: "terminal" | "json";
   cwd: string;
-  apply: boolean;
-  dryRun: boolean;
-  allSafe: boolean;
-  file: string | undefined;
-  scopeExplicit: boolean;
 }
+
+type ScopedCommand<Name extends "profile" | "check" | "preview"> =
+  CommonArguments & { command: Name; scope: Scope };
+type JournalCommand<Name extends "recover" | "undo"> = CommonArguments & {
+  command: Name;
+};
+
+type ParsedArguments =
+  | ScopedCommand<"profile">
+  | ScopedCommand<"check">
+  | ScopedCommand<"preview">
+  | (CommonArguments & {
+      command: "explain";
+      scope: Scope;
+      findingId: string;
+    })
+  | (CommonArguments & {
+      command: "fix";
+      scope: { kind: "worktree" };
+      findingId: string | undefined;
+      apply: boolean;
+      allSafe: boolean;
+      file: string | undefined;
+    })
+  | (CommonArguments & {
+      command: "verify";
+      target: "worktree" | "staged";
+    })
+  | JournalCommand<"recover">
+  | JournalCommand<"undo">;
+
+type Command = ParsedArguments["command"];
 
 function valueAfter(args: string[], index: number, flag: string): string {
   const value = args[index + 1];
@@ -125,10 +164,11 @@ function parseArguments(argv: string[]): ParsedArguments {
     throw new Error("RepoFit exposes the `comments` command group. Run with --help.");
   }
 
-  const command = argv[1];
-  if (!command || !["profile", "check", "preview", "explain", "fix", "verify"].includes(command)) {
-    throw new Error(`Unknown or missing comments command: ${command ?? "(missing)"}`);
+  const rawCommand = argv[1];
+  if (!rawCommand || !["profile", "check", "preview", "explain", "fix", "verify", "recover", "undo"].includes(rawCommand)) {
+    throw new Error(`Unknown or missing comments command: ${rawCommand ?? "(missing)"}`);
   }
+  const command = rawCommand as Command;
 
   let staged = false;
   let worktree = false;
@@ -222,24 +262,67 @@ function parseArguments(argv: string[]): ParsedArguments {
   ) {
     throw new Error(`comments ${command} does not accept positional arguments.`);
   }
+  if ((command === "recover" || command === "undo") && selectedScopes !== 0) {
+    throw new Error(
+      `comments ${command} does not accept a Git scope; it uses the latest worktree receipt.`,
+    );
+  }
 
-  const scope: Scope = base !== undefined ? { kind: "base", ref: base } : worktree ? { kind: "worktree" } : { kind: "staged" };
-  return {
-    command,
-    positional,
-    scope,
-    format,
-    cwd,
-    apply,
-    dryRun,
-    allSafe,
-    file,
-    scopeExplicit: selectedScopes === 1,
-  };
+  const scope: Scope =
+    base !== undefined
+      ? { kind: "base", ref: base }
+      : worktree
+        ? { kind: "worktree" }
+        : { kind: "staged" };
+  const common = { format, cwd };
+  switch (command) {
+    case "profile":
+    case "check":
+    case "preview":
+      return { ...common, command, scope };
+    case "explain":
+      return { ...common, command, scope, findingId: positional[0] as string };
+    case "fix":
+      if (!worktree || selectedScopes !== 1) {
+        throw new Error(
+          "Automatic fixes require --worktree. Staged and base scopes are read-only.",
+        );
+      }
+      return {
+        ...common,
+        command,
+        scope: { kind: "worktree" },
+        findingId: positional[0],
+        apply,
+        allSafe,
+        file,
+      };
+    case "verify":
+      if (base !== undefined) {
+        throw new Error("comments verify supports only --worktree or --staged.");
+      }
+      return {
+        ...common,
+        command,
+        target: staged ? "staged" : "worktree",
+      };
+    case "recover":
+    case "undo":
+      return { ...common, command };
+  }
 }
 
 function printJson(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+}
+
+function printFixPreviewJson(findings: Finding[]): void {
+  printJson({
+    schemaVersion: REPORT_SCHEMA_VERSION,
+    type: "fix-preview",
+    write: false,
+    findings,
+  });
 }
 
 function run(argv: string[]): number {
@@ -253,16 +336,12 @@ function run(argv: string[]): number {
   const root = discoverRepositoryRoot(parsed.cwd);
 
   if (parsed.command === "verify") {
-    if (parsed.scope.kind === "base") {
-      usageError("comments verify supports only --worktree or --staged.");
-    }
-    const target = parsed.scopeExplicit ? parsed.scope.kind : "worktree";
-    const verification = verifyLastFix(root, target);
+    const verification = verifyLastFix(root, parsed.target);
     if (parsed.format === "json") {
       printJson(verification);
     } else if (verification.valid) {
       process.stdout.write(
-        `Verified ${verification.receipt.findingIds.map(sanitizeTerminalText).join(", ")} in ${sanitizeTerminalText(verification.receipt.relativePath)} (${verification.target}).\n`,
+        `Verified ${verification.receipt.findingIds.map(sanitizeTerminalText).join(", ")} in ${sanitizeTerminalText(verification.receipt.relativePath)} (${verification.target}; journal=${verification.receipt.status}).\n`,
       );
     } else {
       process.stdout.write(`Verification failed:\n- ${verification.reasons.join("\n- ")}\n`);
@@ -270,10 +349,36 @@ function run(argv: string[]): number {
     return verification.valid ? 0 : EXIT_VERIFY_FAILED;
   }
 
-  if (parsed.command === "fix" && parsed.scope.kind !== "worktree") {
-    usageError(
-      "Automatic fixes only support --worktree. Use check or preview for staged/base changes, then re-run fix with --worktree and stage the verified result.",
-    );
+  if (parsed.command === "undo") {
+    let receipt: FixReceipt;
+    try {
+      receipt = undoLastFix(root);
+    } catch (error) {
+      writeRefused(error);
+    }
+    if (parsed.format === "json") printJson(receipt);
+    else {
+      process.stdout.write(
+        `Restored ${sanitizeTerminalText(receipt.relativePath)} from receipt ${sanitizeTerminalText(receipt.receiptId)}. The Git index was not changed.\n`,
+      );
+    }
+    return 0;
+  }
+
+  if (parsed.command === "recover") {
+    let receipt: FixReceipt;
+    try {
+      receipt = recoverLastFix(root);
+    } catch (error) {
+      writeRefused(error);
+    }
+    if (parsed.format === "json") printJson(receipt);
+    else {
+      process.stdout.write(
+        `Recovered receipt ${sanitizeTerminalText(receipt.receiptId)} as ${receipt.status} (${"recoveryAction" in receipt ? receipt.recoveryAction : "no transition"}).\n`,
+      );
+    }
+    return 0;
   }
 
   const report = analyzeRepository(root, parsed.scope);
@@ -311,10 +416,13 @@ function run(argv: string[]): number {
       );
     }
     if (!parsed.apply) {
-      process.stdout.write(`${previewFindings(safeFindings)}\n`);
-      process.stdout.write(
-        `Dry run only. Re-run with --apply to write these ${safeFindings.length} findings as one transaction.\n`,
-      );
+      if (parsed.format === "json") printFixPreviewJson(safeFindings);
+      else {
+        process.stdout.write(`${previewFindings(safeFindings)}\n`);
+        process.stdout.write(
+          `Dry run only. Re-run with --apply to write these ${safeFindings.length} findings as one transaction.\n`,
+        );
+      }
       return 0;
     }
     let receipt: FixReceipt;
@@ -335,10 +443,8 @@ function run(argv: string[]): number {
     return 0;
   }
 
-  const findingId = parsed.positional[0];
-  if (!findingId) {
-    usageError(`${parsed.command} requires a finding ID.`);
-  }
+  const findingId = parsed.findingId;
+  if (!findingId) usageError(`${parsed.command} requires a finding ID.`);
   const finding = report.findings.find((candidate) => candidate.id === findingId);
   if (!finding) {
     const message = `Finding not found in the current ${parsed.scope.kind} diff: ${findingId}`;
@@ -354,8 +460,11 @@ function run(argv: string[]): number {
 
   if (parsed.command === "fix") {
     if (!parsed.apply) {
-      process.stdout.write(`${previewFinding(finding)}\n`);
-      process.stdout.write("Dry run only. Re-run with --apply to write this one finding.\n");
+      if (parsed.format === "json") printFixPreviewJson([finding]);
+      else {
+        process.stdout.write(`${previewFinding(finding)}\n`);
+        process.stdout.write("Dry run only. Re-run with --apply to write this one finding.\n");
+      }
       return 0;
     }
     let receipt: FixReceipt;
@@ -379,7 +488,7 @@ function run(argv: string[]): number {
   throw new CliError(
     "analysis-failed",
     EXIT_RUNTIME,
-    `Unhandled command: ${parsed.command}`,
+    "Unhandled command state.",
   );
 }
 

@@ -57,6 +57,31 @@ test("CLI checks, previews, applies, and verifies one worktree comment fix", () 
     );
     assert.ok(finding);
 
+    const jsonDryRun = spawnSync(
+      process.execPath,
+      [
+        cliPath,
+        "comments",
+        "fix",
+        finding.id,
+        "--worktree",
+        "--dry-run",
+        "--format",
+        "json",
+      ],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert.equal(jsonDryRun.status, 0, jsonDryRun.stderr);
+    const preview = JSON.parse(jsonDryRun.stdout) as {
+      type: string;
+      write: boolean;
+      findings: Array<{ id: string }>;
+    };
+    assert.equal(preview.type, "fix-preview");
+    assert.equal(preview.write, false);
+    assert.equal(preview.findings[0]?.id, finding.id);
+    assert.equal(readFileSync(path, "utf8"), changed);
+
     const dryRun = spawnSync(
       process.execPath,
       [cliPath, "comments", "fix", finding.id, "--worktree", "--dry-run"],
@@ -99,7 +124,7 @@ test("CLI checks, previews, applies, and verifies one worktree comment fix", () 
       { cwd: root, encoding: "utf8" },
     );
     assert.equal(stagedVerified.status, 0, stagedVerified.stderr || stagedVerified.stdout);
-    assert.match(stagedVerified.stdout, /\(staged\)/);
+    assert.match(stagedVerified.stdout, /\(staged; journal=applied\)/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -390,7 +415,7 @@ test("CLI refuses staged automatic fixes so the index cannot retain stale commen
       { cwd: root, encoding: "utf8" },
     );
     assert.equal(applied.status, 2);
-    assert.match(applied.stderr, /only support --worktree/);
+    assert.match(applied.stderr, /require --worktree/);
     assert.equal(readFileSync(path, "utf8"), changed);
     assert.equal(git(root, ["show", ":staged.ts"]), changed);
   } finally {
@@ -433,6 +458,22 @@ test("CLI rejects irrelevant flags and positional arguments", () => {
   );
   assert.equal(extraFinding.status, 2);
   assert.match(extraFinding.stderr, /exactly one finding ID/);
+
+  const scopedRecover = spawnSync(
+    process.execPath,
+    [cliPath, "comments", "recover", "--staged"],
+    { encoding: "utf8" },
+  );
+  assert.equal(scopedRecover.status, 2);
+  assert.match(scopedRecover.stderr, /does not accept a Git scope/);
+
+  const basedVerify = spawnSync(
+    process.execPath,
+    [cliPath, "comments", "verify", "--base", "HEAD"],
+    { encoding: "utf8" },
+  );
+  assert.equal(basedVerify.status, 2);
+  assert.match(basedVerify.stderr, /supports only --worktree or --staged/);
 });
 
 test("CLI emits versioned JSON errors with stable exit categories", () => {

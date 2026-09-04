@@ -2,6 +2,7 @@ import { lstatSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
+import { decodeUtf8Bytes } from "./encoding.js";
 import { isSupportedSourcePath, wholeFileProtectionReason } from "./file-policy.js";
 import { sha256 } from "./hash.js";
 import type { LineRange, Scope, ScopedFile } from "./model.js";
@@ -62,14 +63,6 @@ interface GitProcessResult {
   stderr: string;
 }
 
-function decodeUtf8(value: Uint8Array, context: string): string {
-  try {
-    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(value);
-  } catch {
-    throw new Error(`${context} is not valid UTF-8; RepoFit refused to analyze it.`);
-  }
-}
-
 function spawnGit(root: string, args: string[]): GitProcessResult {
   const result = spawnSync(
     "git",
@@ -109,8 +102,8 @@ function spawnGit(root: string, args: string[]): GitProcessResult {
   return {
     status: result.status,
     signal: result.signal,
-    stdout: decodeUtf8(result.stdout, `git ${args[0] ?? "command"} stdout`),
-    stderr: decodeUtf8(result.stderr, `git ${args[0] ?? "command"} stderr`),
+    stdout: decodeUtf8Bytes(result.stdout, `git ${args[0] ?? "command"} stdout`),
+    stderr: decodeUtf8Bytes(result.stderr, `git ${args[0] ?? "command"} stderr`),
   };
 }
 
@@ -298,7 +291,7 @@ export function readWorkingTreeContent(root: string, relativePath: string): stri
   if (metadata.isSymbolicLink() || !metadata.isFile()) {
     throw new Error(`Refusing to read or rewrite a non-regular source file: ${relativePath}`);
   }
-  return decodeUtf8(
+  return decodeUtf8Bytes(
     readFileSync(absolutePath),
     `Working-tree file ${relativePath}`,
   );

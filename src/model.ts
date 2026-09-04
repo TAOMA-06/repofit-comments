@@ -1,5 +1,5 @@
 export const REPORT_SCHEMA_VERSION = "1.0";
-export const RECEIPT_SCHEMA_VERSION = "2.0";
+export const RECEIPT_SCHEMA_VERSION = "3.0";
 
 export type Scope =
   | { kind: "staged" }
@@ -110,16 +110,76 @@ export interface AnalysisReport {
   };
 }
 
-export interface FixReceipt {
-  schemaVersion: string;
+export type FixReceiptStatus =
+  | "prepared"
+  | "applied"
+  | "undo-prepared"
+  | "undone"
+  | "aborted";
+
+interface FixReceiptBase {
+  schemaVersion: typeof RECEIPT_SCHEMA_VERSION;
+  receiptId: string;
+  repositoryId: string;
   findingIds: string[];
   relativePath: string;
-  analysisScope: Scope;
+  analysisScope: { kind: "worktree" };
   writeTarget: "worktree";
-  appliedAt: string;
+  preparedAt: string;
+  fileMode: number;
   beforeFileHash: string;
   afterFileHash: string;
   nonCommentTokenHash: string;
   syntaxTreeHash: string;
   protectedCommentHash: string;
 }
+
+export interface PreparedFixReceipt extends FixReceiptBase {
+  status: "prepared";
+}
+
+interface AppliedFixReceiptBase extends FixReceiptBase {
+  status: "applied";
+  appliedAt: string;
+}
+
+type RecoveryFields<Action extends string> =
+  | { recoveredAt?: never; recoveryAction?: never }
+  | { recoveredAt: string; recoveryAction: Action };
+
+export type AppliedFixReceipt = AppliedFixReceiptBase &
+  RecoveryFields<"mark-applied">;
+
+export interface UndoPreparedFixReceipt extends FixReceiptBase {
+  status: "undo-prepared";
+  appliedAt: string;
+  undoPreparedAt: string;
+  undoOperationId: string;
+}
+
+interface UndoneFixReceiptBase extends FixReceiptBase {
+  status: "undone";
+  appliedAt: string;
+  undoPreparedAt: string;
+  undoOperationId: string;
+  undoneAt: string;
+}
+
+export type UndoneFixReceipt = UndoneFixReceiptBase &
+  RecoveryFields<"mark-undone">;
+
+interface AbortedFixReceiptBase extends FixReceiptBase {
+  status: "aborted";
+  abortedAt: string;
+  abortReason: string;
+}
+
+export type AbortedFixReceipt = AbortedFixReceiptBase &
+  RecoveryFields<"mark-aborted">;
+
+export type FixReceipt =
+  | PreparedFixReceipt
+  | AppliedFixReceipt
+  | UndoPreparedFixReceipt
+  | UndoneFixReceipt
+  | AbortedFixReceipt;
