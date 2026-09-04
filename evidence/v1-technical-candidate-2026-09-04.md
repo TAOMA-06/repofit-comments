@@ -14,8 +14,8 @@ Status: local technical-candidate evidence only. This is not npm publication, a 
 
 - TypeScript strict check passed.
 - 126 automated tests passed with zero failures or skips.
-- Node experimental coverage reported 93.81% lines, 81.46% branches, and 97.92% functions.
-- The performance fixture completed 10,000 changed lines in 301.8 ms and 100 changed files in 331.6 ms, below the local 10-second and 5-second gates. These are single local runs, not P95 measurements.
+- Node experimental coverage reported 93.76% lines, 81.46% branches, and 97.92% functions.
+- The final performance fixture completed 10,000 changed lines in 371.5 ms and 100 changed files in 386.0 ms, below the local 10-second and 5-second gates. These are single local runs, not P95 measurements.
 - The isolated package smoke built an allowlisted tarball, installed it into a clean prefix with an isolated npm cache, ran the installed CLI, blocked internal module imports, and exercised check, SARIF, apply, worktree/staged verification, and undo without index mutation.
 - Regression coverage includes reason-required suppressions, exact Node `>=22.14.0` doctor behavior, invalid UTF-8, BOM/CRLF, non-final newline patches, symlink/junction and hard-link refusal, Action output clobber/Git-metadata refusal, and Unicode path ordering across batched Git diffs.
 

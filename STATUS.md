@@ -36,8 +36,8 @@ Date: 2026-09-04
 
 - Strict TypeScript check passes.
 - 126 automated tests pass on the current productization branch.
-- Node's experimental coverage run reports 93.81% overall line coverage, 81.46% branch coverage, and 97.92% function coverage; subprocess-rendered terminal paths are not fully attributed to the parent coverage report.
-- The final local performance gate scans a 10,000-changed-line fixture in 301.8 ms and a 100-file fixture in 331.6 ms on this workspace, below the 10-second and 5-second thresholds respectively. These are single-run local measurements, not remote P95 evidence.
+- Node's experimental coverage run reports 93.76% overall line coverage, 81.46% branch coverage, and 97.92% function coverage; subprocess-rendered terminal paths are not fully attributed to the parent coverage report.
+- The final local performance gate scans a 10,000-changed-line fixture in 371.5 ms and a 100-file fixture in 386.0 ms on this workspace, below the 10-second and 5-second thresholds respectively. These are single-run local measurements, not remote P95 evidence.
 - End-to-end tests cover staged, worktree, and base scopes; worktree-only apply; staged-fix refusal; staged receipt verification; dry-run; one-finding apply; single-file batch apply; and concurrent edit refusal.
 - Edge tests cover strings and template literals containing comment-like text, changed-line filtering, protected directives, legal and rationale comments, rationale-preserving step-prefix rewrites, numeric constraints, CRLF, TSX block comments, MTS/CTS, whole-file generated protection, parse ranges, token equivalence, syntax-tree equivalence, symbolic-link refusal, and style-profile readiness.
 - Adversarial Git tests prove inherited/configured external diff commands, attribute-selected diff drivers, textconv drivers, and `GIT_CONFIG_COUNT` injection are not executed.
