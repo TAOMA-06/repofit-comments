@@ -24,8 +24,8 @@ if (
   throw new Error("RepoFit Action output must be a control-free repository-relative .sarif path.");
 }
 const outputSegments = output.split(/[\\/]/u);
-if (outputSegments.some((segment) => segment.toLowerCase() === ".git")) {
-  throw new Error("RepoFit Action output cannot target Git metadata.");
+if (outputSegments.length !== 1) {
+  throw new Error("RepoFit Action output must be a top-level SARIF filename.");
 }
 const outputPath = resolve(workspace, output);
 const fromWorkspace = relative(workspace, outputPath);
@@ -40,22 +40,6 @@ if (
   realParentFromWorkspace.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)
 ) {
   throw new Error("RepoFit Action output parent resolves outside the repository workspace.");
-}
-const gitDirectoryResult = spawnSync("git", ["rev-parse", "--absolute-git-dir"], {
-  cwd: workspace,
-  encoding: "utf8",
-});
-if (gitDirectoryResult.status !== 0) {
-  throw new Error(gitDirectoryResult.stderr || "RepoFit Action could not resolve Git metadata.");
-}
-const realGitDirectory = realpathSync(gitDirectoryResult.stdout.trim());
-const parentFromGitDirectory = relative(realGitDirectory, realOutputParent);
-if (
-  parentFromGitDirectory === "" ||
-  (parentFromGitDirectory !== ".." &&
-    !parentFromGitDirectory.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`))
-) {
-  throw new Error("RepoFit Action output cannot target Git metadata or an alias to it.");
 }
 if (existsSync(outputPath)) throw new Error("RepoFit Action refuses to overwrite an existing output file.");
 const cliPath = fileURLToPath(new URL("../dist/src/cli.js", import.meta.url));

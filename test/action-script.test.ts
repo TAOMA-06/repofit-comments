@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -79,6 +80,7 @@ test("consumer Action runner writes SARIF inside the workspace and reports outpu
       "package.json",
       ".git/result.sarif",
       ".GIT/result.sarif",
+      "metadata-alias/result.sarif",
       "bad\tname.sarif",
       "linked.sarif",
     ]) {
@@ -90,6 +92,28 @@ test("consumer Action runner writes SARIF inside the workspace and reports outpu
     }
     assert.equal(readFileSync(outside, "utf8"), "preserve me\n");
     rmSync(outside);
+
+    const unrelatedRepository = mkdtempSync(join(tmpdir(), "repofit-action-unrelated-git-"));
+    try {
+      git(unrelatedRepository, ["init", "-q"]);
+      symlinkSync(
+        join(root, ".git"),
+        join(root, "metadata-alias"),
+        process.platform === "win32" ? "junction" : "dir",
+      );
+      const redirected = spawnSync(process.execPath, [actionScript], {
+        encoding: "utf8",
+        env: {
+          ...commonEnvironment,
+          GIT_DIR: join(unrelatedRepository, ".git"),
+          INPUT_OUTPUT: "metadata-alias/repofit-audit.sarif",
+        },
+      });
+      assert.notEqual(redirected.status, 0);
+      assert.equal(existsSync(join(root, ".git", "repofit-audit.sarif")), false);
+    } finally {
+      rmSync(unrelatedRepository, { recursive: true, force: true });
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

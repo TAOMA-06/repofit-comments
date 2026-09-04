@@ -9,12 +9,12 @@ inputs:
     description: Base commit or ref used for merge-base analysis.
     required: true
   output:
-    description: Repository-relative SARIF output path.
+    description: Top-level SARIF output filename.
     required: false
     default: repofit-results.sarif
 outputs:
   sarif-path:
-    description: Repository-relative SARIF output path.
+    description: Top-level SARIF output filename.
     value: ${{ steps.scan.outputs.sarif-path }}
   findings:
     description: Number of emitted findings.
