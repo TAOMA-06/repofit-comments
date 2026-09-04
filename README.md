@@ -2,11 +2,13 @@
 
 [![CI](https://github.com/TAOMA-06/repofit-comments/actions/workflows/ci.yml/badge.svg)](https://github.com/TAOMA-06/repofit-comments/actions/workflows/ci.yml)
 
-RepoFit Comments 是一个本地终端工具，用来检查当前 TypeScript/TSX Git Diff 中显眼的生成式注释写法，并在可证明不改变代码时进行保守清理。
+RepoFit Comments 是一个本地终端工具，用来检查当前 TypeScript 家族（`.ts`、`.tsx`、`.mts`、`.cts`）Git Diff 中显眼的生成式注释写法，并在可证明不改变代码时进行保守清理。
 
 It focuses on presentation patterns such as numbered steps, decorative headings, nearby duplicates, narrow line-by-line restatements, tutorial tone, and generation-process narration. It does **not** determine who wrote code, falsify authorship, remove a hidden model watermark, or promise to bypass an AI detector.
 
 See [STATUS.md](./STATUS.md) for the exact evidence boundary. The public-history smoke cases are in [evidence/public-smoke-2026-09-03.md](./evidence/public-smoke-2026-09-03.md), and the live Grok 4.5 evaluation is in [evidence/grok-4.5-eval-2026-09-03.md](./evidence/grok-4.5-eval-2026-09-03.md).
+
+The in-progress v0.2 safety slice is recorded separately in [evidence/trusted-fix-core-2026-09-04.md](./evidence/trusted-fix-core-2026-09-04.md); it is local evidence, not a Beta release claim.
 
 Formal-product work is governed by the [V1 product specification](./docs/product/V1_PRODUCT_SPEC.md), [execution plan](./docs/product/V1_EXECUTION_PLAN.md), and [release strategy](./docs/product/V1_RELEASE_STRATEGY.md).
 
@@ -17,6 +19,7 @@ Formal-product work is governed by the [V1 product specification](./docs/product
 - Read-only and offline during `check`, `preview`, and `profile`.
 - Automatic changes require `--worktree` and are limited to one safe finding or one file's safe findings at a time.
 - A patch is built and validated in memory before writing.
+- A private write-ahead journal and byte-exact backup are persisted before source replacement.
 - Non-comment tokens and the comment-free syntax-tree shape must stay identical.
 - Protected comments must remain byte-for-byte identical and in order. A `Step N:` prefix may be removed while its protected rationale remains identical.
 - No staging, commits, pushes, dependency changes, or repository scripts.
@@ -51,13 +54,21 @@ repofit comments fix --all-safe --file src/example.ts --worktree --dry-run
 repofit comments fix --all-safe --file src/example.ts --worktree --apply
 repofit comments verify
 repofit comments verify --staged
+repofit comments recover
+repofit comments undo
 ```
 
 `--all-safe` is deliberately file-scoped. If safe findings span multiple files, RepoFit refuses to choose for you and requires `--file`.
 
 Staged and base scopes are read-only. After a worktree fix, run `verify`, stage the repaired file yourself, then run `verify --staged` to prove that the Git index contains the repaired bytes.
 
-Use `--format json` with `check`, `profile`, or `explain` for machine-readable output.
+Every applied fix stores a byte-exact receipt and backup under `.git/repofit-comments/`; on POSIX systems the directories use mode `0700` and files use mode `0600`. Windows DACL privacy is not yet verified, so Windows automatic writes remain outside the current local evidence claim. A repository-wide writer lock and recoverable no-clobber transaction prevent RepoFit operations from interleaving and capture ordinary last-moment edits instead of overwriting them. The source path can be briefly absent between displacement and candidate installation; this is not marketed as an atomic rename. `verify` succeeds only for an `applied` journal; after an interrupted operation, `recover` reconciles the journal with the two known byte states. `undo` is deliberately one level: it restores the latest journal only when that journal is still `applied` and its hash and mode match. It does not search older history past an aborted or already-undone journal. Neither command changes the Git index, so a previously staged repaired blob remains staged until you update it yourself.
+
+Schema 3 upgrades preserve a schema 2 Alpha receipt in `.git/repofit-comments/legacy/`, tighten the data directory on POSIX, and then start new recoverable history. Schema 2 can be inspected but cannot be undone because the Alpha did not store a byte-exact backup.
+
+Automatic fixes currently accept source files up to 2 MiB. Admission of a new fix is fail-closed at 200 receipt records or 64 MiB of recovery data; transitions needed to recover an already-admitted journal are not blocked by that quota. RepoFit never auto-deletes a receipt or backup. Until `list`/`prune` lands, users must manually archive terminal history only after confirming it is no longer needed.
+
+Use `--format json` with `check`, `profile`, `explain`, `fix`, `verify`, `recover`, or `undo` for machine-readable output.
 
 ## Exit codes
 
@@ -107,9 +118,10 @@ The profile is deliberately small: comment density, average length, dominant lan
 ```bash
 npm run check
 npm test
+npm run test:package
 ```
 
-The package remains marked `private` so a source release cannot be mistaken for an npm release. Package publication, signing, and production support remain separate decisions.
+The package remains marked `private` so a source release cannot be mistaken for an npm release. The package export map blocks internal library subpaths because the current contract is CLI-only. Package publication, signing, and production support remain separate decisions.
 
 ## License
 

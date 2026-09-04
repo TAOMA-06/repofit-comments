@@ -18,25 +18,28 @@ Date: 2026-09-04
 - Terminal and JSON reports with stable finding IDs.
 - One-finding dry run/application plus single-file batch transactions for deterministic `remove-safe` and `rewrite-safe` findings.
 - In-memory validation before writing: parse diagnostics, non-comment token hash, comment-free syntax-tree hash, protected-comment hash, and file hash.
-- Atomic file replacement, concurrent-edit refusal, no staging or commit behavior, and a local verification receipt under `.git/repofit-comments/`.
+- Durable, recoverable no-clobber replacement, concurrent-edit refusal, no staging or commit behavior, and receipt/backup history under `.git/repofit-comments/` with enforced private modes on POSIX. Windows DACL privacy is unverified. The source path has a documented brief absence window; this is not an atomic-rename claim.
 - Hardened Git execution disables external diff/textconv, environment-based Git configuration injection, lazy fetching, prompts, optional locks, replace objects, fsmonitor, and pagers; every Git subprocess has a timeout.
 - Automatic fixes are worktree-only. `verify --staged` checks that the user-staged blob exactly matches the repaired receipt.
 - Generated headers and generated/vendor/fixture/migration/snapshot/declaration paths protect the whole file from findings and writes.
+- Each fix uses a repository-wide process lock and no-clobber replacement, then writes a private recovery journal and byte-exact backup before replacing source; `verify` accepts only an applied state, `recover` explicitly reconciles interrupted states, and one-level `undo` restores the latest journal only when hash, mode, token, AST, and protected-comment checks pass.
+- Schema 2 Alpha state is preserved under a private legacy archive before schema 3 starts; automatic writes are fail-closed above 2 MiB per backup, 200 receipts, or 64 MiB of recovery data.
 
 ## Locally verified
 
 - Strict TypeScript check passes.
-- 49 automated tests pass on the current productization branch.
-- Node's experimental coverage run reports 91.08% overall line coverage and 79.05% branch coverage; subprocess-rendered terminal paths are not fully attributed to the parent coverage report.
+- 85 automated tests pass on the current productization branch.
+- Node's experimental coverage run reports 92.68% overall line coverage and 81.62% branch coverage; subprocess-rendered terminal paths are not fully attributed to the parent coverage report.
 - End-to-end tests cover staged, worktree, and base scopes; worktree-only apply; staged-fix refusal; staged receipt verification; dry-run; one-finding apply; single-file batch apply; and concurrent edit refusal.
 - Edge tests cover strings and template literals containing comment-like text, changed-line filtering, protected directives, legal and rationale comments, rationale-preserving step-prefix rewrites, numeric constraints, CRLF, TSX block comments, MTS/CTS, whole-file generated protection, parse ranges, token equivalence, syntax-tree equivalence, symbolic-link refusal, and style-profile readiness.
 - Adversarial Git tests prove inherited/configured external diff commands, attribute-selected diff drivers, textconv drivers, and `GIT_CONFIG_COUNT` injection are not executed.
 - Terminal tests prove repository-controlled C0/C1, ANSI/OSC, zero-width, and bidirectional formatting characters are rendered as visible escapes.
 - Encoding/path tests reject invalid UTF-8 in the worktree and index, preserve a UTF-8 BOM through an applied fix, and reject parent symlink/junction paths that resolve outside the repository.
 - CLI contract tests reject irrelevant arguments, source `--version` from `package.json`, and distinguish usage, runtime, verification, and write-refusal exit categories; JSON failures use a versioned stderr envelope.
-- Runtime dependency audit reports 0 known vulnerabilities at the time of validation.
-- Package dry run excludes tests and development sources from the installable file list.
-- A packed tarball installs in a clean temporary prefix; its `repofit --help` command and a scan of the cleaned Grok fixture both run successfully through the installed binary.
+- Recovery tests cover private receipt/backup/directory modes on the current POSIX host, repository identity, exact byte and mode restoration, active/stale locks, hard-link refusal, ordinary last-moment edit capture, coordinated backup/receipt tampering, history isolation, and injected interruption before, during, and after source replacement and undo.
+- The last successful online runtime dependency audit (2026-09-03) reported 0 known vulnerabilities. On 2026-09-04 the unchanged lockfile still reported 0 from the local npm audit cache, but the online audit endpoint timed out; this is not counted as a refreshed registry result.
+- Package smoke builds in an isolated clean directory, checks an exact tarball allowlist, and excludes tests, development sources, product-status documents, and evaluation evidence.
+- A packed tarball built from an isolated clean directory installs in a clean prefix; its installed binary completes version reporting, one-finding and Grok four-finding batch apply, worktree/staged verification, exact undo without index mutation, post-cleanup zero-finding scan, the Grok fixture's 4/4 tests, and internal-import blocking. The local smoke supplies the exact installed TypeScript runtime dependency offline; fresh registry resolution is configured for the unrun remote CI matrix.
 - The initial public `main` push completed its Ubuntu/Node.js 22 GitHub Actions workflow successfully.
 
 ## Live model-generated evaluation
@@ -49,8 +52,9 @@ Grok 4.5 with low reasoning generated four TypeScript/test files in a separate f
 - The receipt verified identical non-comment token, syntax-tree, and protected-rationale hashes.
 - The generated project passed strict type checking and all four functional tests before and after cleanup.
 - A post-cleanup scan reported zero remaining findings.
+- The v0.2 Trusted Fix Core replay additionally verified worktree apply, staged verification, exact undo without index mutation, re-apply, and the same 4/4 functional tests.
 
-See [evidence/grok-4.5-eval-2026-09-03.md](./evidence/grok-4.5-eval-2026-09-03.md).
+See [evidence/grok-4.5-eval-2026-09-03.md](./evidence/grok-4.5-eval-2026-09-03.md) and [evidence/trusted-fix-core-2026-09-04.md](./evidence/trusted-fix-core-2026-09-04.md).
 
 ## Public-repository smoke evidence
 

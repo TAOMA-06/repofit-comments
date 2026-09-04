@@ -30,11 +30,11 @@ RepoFit Comments 不进入“通用 AI slop 扫描器”或“AI 作者鉴定器
 以下事实来自当前仓库，不代表尚未完成的 1.0 能力：
 
 - 当前为公开 GitHub Alpha，尚未发布 npm、Homebrew、签名二进制或生产发行版。
-- 当前只支持 TypeScript 和 TSX，只分析 staged、worktree 或相对 base ref 的 Git 变更中的新增/修改注释。
-- `check`、`preview` 和 `profile` 为离线只读操作；自动写入只允许单 finding 或单文件安全 finding 集合，并要求显式 `--apply`。
-- 写入前检查 parse diagnostics、非注释 token hash、去注释语法树 hash、受保护注释 hash 和源文件 hash；写入使用原子替换，并留下本地 receipt。
+- 当前产品化分支支持 TypeScript 家族 `.ts`、`.tsx`、`.mts` 和 `.cts`，只分析 staged、worktree 或相对 base ref 的 Git 变更中的新增/修改注释。
+- `check`、`preview`、`profile` 和 `explain` 为离线只读操作；自动写入只允许单 finding 或单文件安全 finding 集合，并要求显式 `--worktree --apply`。
+- 写入前检查 parse diagnostics、非注释 token hash、去注释语法树 hash、受保护注释 hash 和源文件 hash；写入使用可恢复的 no-clobber 事务并留下私有 journal、backup 与 receipt。源路径在替换中有短暂缺失窗口，不声称是原子 rename。
 - 当前保护许可证、归属、JSDoc、块注释、工具指令、生成标记、URL/issue/TODO、兼容性、安全、隐私、并发、迁移、格式/单位/版本约束、理由性注释和疑似注释代码；不确定时保留。
-- 当前 30 个自动化测试通过，并有少量真实生成 fixture 与公开仓库 smoke evidence；这不是统计有效的 precision/recall 研究，也没有维护者盲审结论。
+- 当前产品化分支有 85 个自动化测试通过，并用最终干净安装包复跑 Grok 4.5 fixture；公开 `main` 仍是较早的 30-test Alpha。这些仍不是统计有效的 precision/recall 研究，也没有维护者盲审结论。
 
 仓库证据：[README](../../README.md)、[STATUS](../../STATUS.md)、[写入验证实现](../../src/patch.ts)、[Grok 4.5 样例](../../evidence/grok-4.5-eval-2026-09-03.md)。
 
@@ -180,7 +180,7 @@ V1 不加载可执行 JavaScript/TypeScript 配置，避免扫描工具执行仓
 5. 要求非注释 token 序列一致；
 6. 要求去注释语法树一致；
 7. 要求所有受保护注释内容与顺序一致；
-8. 以原子替换写入；
+8. 以可恢复的 no-clobber 事务写入，检测并保留普通并发修改，同时明确记录短暂的源路径缺失窗口；
 9. 生成权限受限的 receipt，并能由独立 `verify` 命令复验。
 
 receipt 是安全证据，不是“运行行为完全等价”或“被删注释一定无价值”的证明；文档必须保留该限制。

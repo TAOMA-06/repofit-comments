@@ -16,18 +16,21 @@
   "bin": {
     "repofit": "dist/src/cli.js"
   },
+  "exports": {
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist/src",
     "README.md",
     "CHANGELOG.md",
-    "STATUS.md",
-    "evidence"
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "prepare": "npm run build",
-    "test": "npm run build && node --test dist/test/*.test.js"
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "test:package": "node scripts/package-smoke.mjs"
   },
   "engines": {
     "node": ">=22"

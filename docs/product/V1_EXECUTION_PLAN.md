@@ -201,7 +201,7 @@ Stop independent product work when automatic-fix acceptance remains below 50% af
 
 ## Current next action
 
-Complete Phase A in small, independently reviewed commits. Do not publish a new npm package, tag, GitHub Release, or Homebrew formula until the Phase A exit gate is green and the user explicitly authorizes the release action.
+The Phase A implementation is locally green. The next action is to push the product branch only after explicit user authorization, open a reviewable pull request, and require the six-job operating-system/Node matrix. Do not publish an npm package, tag, GitHub Release, or Homebrew formula until that remote gate is green and the user separately authorizes the release action.
 
 Current Phase A implementation status:
 
@@ -209,6 +209,9 @@ Current Phase A implementation status:
 - [x] Restrict automatic fixes to `--worktree` and add `verify --staged`.
 - [x] Protect generated, vendored, fixture, migration, snapshot, and declaration files at whole-file scope.
 - [x] Add strict UTF-8 byte handling, BOM preservation, and realpath/junction containment checks.
-- [ ] Add a write-ahead recovery journal, byte-exact backup, and hash-guarded `undo`.
+- [x] Add a repository-wide writer lock, no-clobber replacement, a write-ahead recovery journal, repository-bound receipts, byte-exact mode-preserving backup, explicit interruption recovery, and hash/AST/token-guarded `undo`.
+- [x] Add a controlled schema 2-to-3 upgrade path plus fail-closed per-file, record-count, and total recovery-storage limits.
+- [x] Split the safety state machine into receipt, store, durable-file, source-transaction, and orchestration boundaries.
+- [x] Build the npm tarball from a clean isolated tree and validate its exact file allowlist.
 - [x] Escape terminal control and bidirectional characters.
 - [x] Publish versioned JSON errors, strict command arguments, a package-derived CLI version, and a stable exit-code contract.
