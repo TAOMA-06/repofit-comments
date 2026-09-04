@@ -8,7 +8,7 @@ It focuses on presentation patterns such as numbered steps, decorative headings,
 
 See [STATUS.md](./STATUS.md) for the exact evidence boundary. The public-history smoke cases are in [evidence/public-smoke-2026-09-03.md](./evidence/public-smoke-2026-09-03.md), and the live Grok 4.5 evaluation is in [evidence/grok-4.5-eval-2026-09-03.md](./evidence/grok-4.5-eval-2026-09-03.md).
 
-The source manifest is now `1.0.0-rc.1`. This means the technical v1 feature set is being frozen; it is not proof that npm publication, the remote operating-system matrix, maintainer evaluation, or stable `1.0.0` release gates have passed. See [STATUS.md](./STATUS.md).
+The source manifest is now `1.0.0-rc.1`. The Node 22/24 × macOS/Linux/Windows CI matrix is green, but that is not proof of npm publication, the build-once release workflow, maintainer evaluation, or stable `1.0.0` release gates. See [STATUS.md](./STATUS.md).
 
 Formal-product work is governed by the [V1 product specification](./docs/product/V1_PRODUCT_SPEC.md), [execution plan](./docs/product/V1_EXECUTION_PLAN.md), and [release strategy](./docs/product/V1_RELEASE_STRATEGY.md).
 

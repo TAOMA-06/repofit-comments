@@ -194,7 +194,7 @@ Go, pivot, and stop decisions use the conditions and thresholds in [V1_PRODUCT_S
 
 ## Current next action
 
-The Phase A and technical Phase B/RC implementations are locally complete. The next action is to push the product branch only after explicit user authorization, open a reviewable pull request, and run the configured operating-system/Node and build-once release matrices. Do not stage or publish npm, create a tag, approve a staged package, create a GitHub Release, or add Homebrew until the corresponding remote and external evidence gates pass and the user separately authorizes that exact action.
+The Phase A and technical Phase B/RC implementations are complete, public PR `#1` is open, and its Node 22/24 × macOS/Linux/Windows CI plus package-smoke and benchmark matrix has passed. The next irreversible action is merging the PR, followed by a protected RC tag and the build-once release workflow only after a final user confirmation. Do not stage or publish npm, approve a staged package, publish a GitHub Release, or add Homebrew until the corresponding external evidence gates pass and the user separately authorizes that exact action.
 
 Current Phase A implementation status:
 

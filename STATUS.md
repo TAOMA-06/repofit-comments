@@ -4,7 +4,7 @@ Date: 2026-09-04
 
 ## Current classification
 
-**Local `1.0.0-rc.1` feature-complete technical candidate. Not yet pushed, published to npm, or validated as stable `1.0.0`.**
+**Public PR `#1` contains the `1.0.0-rc.1` feature-complete technical candidate and its cross-platform CI is green. It is not merged, published to npm, or validated as stable `1.0.0`.**
 
 ## Implemented
 
@@ -47,8 +47,8 @@ Date: 2026-09-04
 - Recovery tests cover private receipt/backup/directory modes on the current POSIX host, repository identity, exact byte and mode restoration, active/stale locks, hard-link refusal, ordinary last-moment edit capture, coordinated backup/receipt tampering, history isolation, and injected interruption before, during, and after source replacement and undo.
 - The last successful online runtime dependency audit (2026-09-03) reported 0 known vulnerabilities. On 2026-09-04 the unchanged lockfile still reported 0 from the local npm audit cache, but the online audit endpoint timed out; this is not counted as a refreshed registry result.
 - Package smoke builds in an isolated clean directory, checks an exact tarball allowlist, and excludes tests, development sources, product-status documents, and evaluation evidence.
-- A packed tarball built from an isolated clean directory installs in a clean prefix; its installed binary completes version reporting, one-finding and Grok four-finding batch apply, worktree/staged verification, exact undo without index mutation, post-cleanup zero-finding scan, the Grok fixture's 4/4 tests, and internal-import blocking. The local smoke supplies the exact installed TypeScript runtime dependency offline; fresh registry resolution is configured for the unrun remote CI matrix.
-- Historical Alpha evidence recorded one successful Ubuntu/Node.js 22 workflow; the new RC matrices have not run remotely.
+- A packed tarball built from an isolated clean directory installs in a clean prefix; its installed binary completes version reporting, one-finding and Grok four-finding batch apply, worktree/staged verification, exact undo without index mutation, post-cleanup zero-finding scan, the Grok fixture's 4/4 tests, and internal-import blocking. Local smoke also supports the exact installed TypeScript runtime offline.
+- [GitHub Actions run 33876422395](https://github.com/TAOMA-06/repofit-comments/actions/runs/33876422395) passed on PR head `8c4a1ab`: Node.js 22 and 24 across Ubuntu, macOS, and Windows all completed strict checking, 126 tests, and package smoke with fresh registry dependency resolution; the independent benchmark job also passed. The matching push-triggered run `33876417988` passed the same matrix.
 
 ## Live model-generated evaluation
 
@@ -82,7 +82,7 @@ These are useful smoke cases, not a statistically valid precision or recall stud
 - The v1 corpus of at least twenty independent repositories and two hundred real development diffs has not been collected.
 - Maintainer blind A/B preference, real-world precision, recall, false-positive, and suggestion-acceptance thresholds have not been measured.
 - The source is public at [`TAOMA-06/repofit-comments`](https://github.com/TAOMA-06/repofit-comments). No public npm package, Homebrew formula, signed release, or production distribution has been created.
-- Node.js 22 on macOS is the verified runtime in this workspace. Linux, Node 24, and Windows read-only/write-refusal combinations are configured but not yet run remotely.
+- Node.js 22/24 on macOS, Ubuntu, and Windows are verified by the RC CI matrix. Windows evidence covers read-only behavior and explicit automatic-write refusal; it does not enable Windows writes. The build-once release workflow, attestation, npm staging, and published-asset verification have not run.
 - Automatic rewriting of suggestion-only comments, variable renaming, structural cleanup, and languages outside the TypeScript family remain out of scope.
 
 ## Local commands

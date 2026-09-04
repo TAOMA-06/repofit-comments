@@ -8,7 +8,7 @@ Version: `1.0.0-rc.1`
 
 Host: macOS arm64, Node.js `22.22.3`
 
-Status: local technical-candidate evidence only. This is not npm publication, a GitHub Release, a remote operating-system matrix, or stable `1.0.0` evidence.
+Status: local technical-candidate evidence plus a successful remote cross-platform CI matrix. This is not npm publication, a GitHub Release, a build-once release-workflow result, or stable `1.0.0` evidence.
 
 ## Verification
 
@@ -46,8 +46,8 @@ A separate attempt to ask Grok 4.5 to generate a brand-new sample reached the se
 
 ## External gates not claimed
 
-- The Node 22/24 by macOS/Linux/Windows workflow matrix has not run on the current commit.
-- Windows automatic writes remain intentionally disabled; the configured gate verifies read-only behavior and explicit write refusal.
-- The online npm audit refresh timed out without a result. The release workflow contains a fail-closed online runtime audit gate, but it has not run remotely.
-- No tag, GitHub draft/release, artifact attestation, npm staged publish, 2FA approval, trusted-publisher binding, or Homebrew distribution was performed.
+- [GitHub Actions run 33876422395](https://github.com/TAOMA-06/repofit-comments/actions/runs/33876422395) passed Node 22/24 on macOS, Ubuntu, and Windows, including strict checking, 126 tests, fresh-registry package smoke, and the benchmark. Matching push run `33876417988` also passed.
+- Windows automatic writes remain intentionally disabled; the remote matrix verifies read-only behavior and explicit write refusal.
+- Registry-backed CI installation reported zero known dependency vulnerabilities, but the dedicated release-workflow `npm audit --omit=dev --audit-level=high` gate has not run.
+- No merge, tag, GitHub draft/release, artifact attestation, npm staged publish, 2FA approval, trusted-publisher binding, or Homebrew distribution was performed.
 - The planned multi-repository corpus and maintainer blind evaluation are still required before stable `1.0.0`.
