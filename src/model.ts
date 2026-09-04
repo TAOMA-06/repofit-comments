@@ -1,5 +1,6 @@
-export const REPORT_SCHEMA_VERSION = "1.0";
+export const REPORT_SCHEMA_VERSION = "2.0";
 export const RECEIPT_SCHEMA_VERSION = "3.0";
+export const RULE_PACK_VERSION = "1.0.0";
 
 export type Scope =
   | { kind: "staged" }
@@ -46,11 +47,15 @@ export type FindingAction =
   | "keep-protected"
   | "uncertain";
 
+export type FindingLevel = "info" | "warning" | "error";
+
 export interface Finding {
   id: string;
+  fingerprint: string;
   ruleId: string;
   category: string;
   action: FindingAction;
+  level: FindingLevel;
   relativePath: string;
   line: number;
   endLine: number;
@@ -63,6 +68,24 @@ export interface Finding {
   commentEnd: number;
   removeStart: number;
   removeEnd: number;
+}
+
+export interface ProtectionRecord {
+  action: "keep-protected";
+  fingerprint: string;
+  relativePath: string;
+  line: number;
+  endLine: number;
+  original: string;
+  reason: string;
+}
+
+export interface SuppressionRecord {
+  relativePath: string;
+  directiveLine: number;
+  targetLine: number;
+  ruleId: string;
+  reason: string;
 }
 
 export interface StyleProfile {
@@ -81,12 +104,16 @@ export interface FileAnalysis {
   file: ScopedFile;
   comments: SourceComment[];
   protectedCount: number;
+  protections: ProtectionRecord[];
+  suppressions: SuppressionRecord[];
   findings: Finding[];
   parseErrorCount: number;
 }
 
 export interface AnalysisReport {
   schemaVersion: string;
+  toolVersion?: string;
+  rulePackVersion: string;
   generatedAt: string;
   repositoryRoot: string;
   scope: Scope;
@@ -98,6 +125,8 @@ export interface AnalysisReport {
     parseErrorCount: number;
   }>;
   findings: Finding[];
+  protections: ProtectionRecord[];
+  suppressions: SuppressionRecord[];
   summary: {
     analyzedFileCount: number;
     changedCommentCount: number;

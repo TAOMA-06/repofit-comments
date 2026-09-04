@@ -16,6 +16,8 @@ import { analyzeRepository } from "../src/analysis.js";
 import { readWorkingTreeContent } from "../src/git.js";
 import { applyFinding, verifyLastFix } from "../src/patch.js";
 
+const writeTest = process.platform === "win32" ? test.skip : test;
+
 function git(root: string, args: string[]): string {
   return execFileSync("git", args, { cwd: root, encoding: "utf8" });
 }
@@ -71,7 +73,7 @@ test("staged analysis refuses invalid UTF-8 blobs", () => {
   }
 });
 
-test("a UTF-8 BOM survives a verified automatic fix byte for byte", () => {
+writeTest("a UTF-8 BOM survives a verified automatic fix byte for byte", () => {
   const fixture = createRepository("repofit-utf8-bom-");
   try {
     const changed = `\uFEFF${fixture.baseline.replace("  return 42;", "  // Main Logic\n  return 42;")}`;

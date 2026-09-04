@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TAOMA-06/repofit-comments/schemas/history-prune.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "type", "applied", "keep", "recoveredOperations", "prunedReceiptIds", "retainedReceiptIds"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "type": { "const": "history-prune" },
+    "applied": { "type": "boolean" },
+    "keep": { "type": "integer", "minimum": 1, "maximum": 200 },
+    "recoveredOperations": { "$ref": "#/$defs/ids" },
+    "prunedReceiptIds": { "$ref": "#/$defs/ids" },
+    "retainedReceiptIds": { "$ref": "#/$defs/ids" }
+  },
+  "$defs": {
+    "ids": { "type": "array", "items": { "type": "string", "format": "uuid" } }
+  }
+}

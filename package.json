@@ -1,7 +1,7 @@
 {
   "name": "repofit-comments",
-  "version": "0.1.0",
-  "private": true,
+  "version": "1.0.0-rc.1",
+  "private": false,
   "description": "Comment-first CLI for reducing AI-style narration in TypeScript diffs while preserving repository intent.",
   "license": "MIT",
   "repository": {
@@ -12,33 +12,43 @@
   "bugs": {
     "url": "https://github.com/TAOMA-06/repofit-comments/issues"
   },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/",
+    "tag": "next"
+  },
+  "packageManager": "npm@11.19.1",
   "type": "module",
   "bin": {
     "repofit": "dist/src/cli.js"
   },
   "exports": {
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./schemas/*": "./schemas/*"
   },
   "files": [
     "dist/src",
+    "schemas",
     "README.md",
     "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "benchmark": "npm run build && node scripts/benchmark.mjs",
     "check": "tsc -p tsconfig.json --noEmit",
     "prepare": "npm run build",
     "test": "npm run build && node --test dist/test/*.test.js",
     "test:package": "node scripts/package-smoke.mjs"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.14.0"
   },
   "dependencies": {
     "typescript": "6.0.3"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.0.0",
+    "ajv": "^8.20.0"
   }
 }

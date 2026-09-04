@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TAOMA-06/repofit-comments/schemas/verification.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["valid", "reasons", "receipt", "target"],
+  "properties": {
+    "valid": { "type": "boolean" },
+    "reasons": { "type": "array", "items": { "type": "string" } },
+    "receipt": { "$ref": "fix-receipt.schema.json" },
+    "target": { "enum": ["worktree", "staged"] }
+  }
+}

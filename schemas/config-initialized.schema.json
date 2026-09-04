@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TAOMA-06/repofit-comments/schemas/config-initialized.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "type", "toolVersion", "path"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "type": { "const": "config-initialized" },
+    "toolVersion": { "type": "string" },
+    "path": { "type": "string", "minLength": 1 }
+  }
+}

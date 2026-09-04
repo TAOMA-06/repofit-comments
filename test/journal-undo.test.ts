@@ -31,6 +31,8 @@ import {
   MAX_RECOVERY_RECORDS,
 } from "../src/receipt-store.js";
 
+const writeTest = process.platform === "win32" ? test.skip : test;
+
 const cliPath = fileURLToPath(new URL("../src/cli.js", import.meta.url));
 
 function git(root: string, args: string[]): string {
@@ -81,7 +83,7 @@ function schema2ReceiptFor(fixture: ReturnType<typeof createFixture>) {
   };
 }
 
-test("applied fixes create private history and undo restores exact bytes and mode", () => {
+writeTest("applied fixes create private history and undo restores exact bytes and mode", () => {
   const fixture = createFixture("repofit-journal-undo-");
   try {
     chmodSync(fixture.path, 0o744);
@@ -123,7 +125,7 @@ test("applied fixes create private history and undo restores exact bytes and mod
   }
 });
 
-test("a failure after journaling leaves the original source unchanged", () => {
+writeTest("a failure after journaling leaves the original source unchanged", () => {
   const fixture = createFixture("repofit-journal-before-write-");
   try {
     assert.throws(
@@ -144,7 +146,7 @@ test("a failure after journaling leaves the original source unchanged", () => {
   }
 });
 
-test("a prepared journal can undo a source replacement after an interrupted apply", () => {
+writeTest("a prepared journal can undo a source replacement after an interrupted apply", () => {
   const fixture = createFixture("repofit-journal-after-write-");
   try {
     assert.throws(
@@ -170,7 +172,7 @@ test("a prepared journal can undo a source replacement after an interrupted appl
   }
 });
 
-test("recover restores a source displaced by an interrupted apply", () => {
+writeTest("recover restores a source displaced by an interrupted apply", () => {
   const fixture = createFixture("repofit-journal-apply-displaced-");
   try {
     assert.throws(
@@ -190,7 +192,7 @@ test("recover restores a source displaced by an interrupted apply", () => {
   }
 });
 
-test("recover reports a missing source while preserving its private backup", () => {
+writeTest("recover reports a missing source while preserving its private backup", () => {
   const fixture = createFixture("repofit-journal-missing-source-");
   try {
     assert.throws(
@@ -218,7 +220,7 @@ test("recover reports a missing source while preserving its private backup", () 
   }
 });
 
-test("recover finalizes an apply interrupted after candidate installation", () => {
+writeTest("recover finalizes an apply interrupted after candidate installation", () => {
   const fixture = createFixture("repofit-journal-apply-installed-");
   try {
     assert.throws(
@@ -238,7 +240,7 @@ test("recover finalizes an apply interrupted after candidate installation", () =
   }
 });
 
-test("an interrupted undo is finalized deterministically on retry", () => {
+writeTest("an interrupted undo is finalized deterministically on retry", () => {
   const fixture = createFixture("repofit-journal-undo-recovery-");
   try {
     applyFinding(fixture.root, fixture.finding, { kind: "worktree" });
@@ -258,7 +260,7 @@ test("an interrupted undo is finalized deterministically on retry", () => {
   }
 });
 
-test("an undo interrupted after journaling safely resumes on retry", () => {
+writeTest("an undo interrupted after journaling safely resumes on retry", () => {
   const fixture = createFixture("repofit-journal-undo-before-write-");
   try {
     applyFinding(fixture.root, fixture.finding, { kind: "worktree" });
@@ -280,7 +282,7 @@ test("an undo interrupted after journaling safely resumes on retry", () => {
   }
 });
 
-test("recover restores a source displaced by an interrupted undo", () => {
+writeTest("recover restores a source displaced by an interrupted undo", () => {
   const fixture = createFixture("repofit-journal-undo-displaced-");
   try {
     applyFinding(fixture.root, fixture.finding, { kind: "worktree" });
@@ -298,7 +300,7 @@ test("recover restores a source displaced by an interrupted undo", () => {
   }
 });
 
-test("recover finalizes an undo interrupted after original installation", () => {
+writeTest("recover finalizes an undo interrupted after original installation", () => {
   const fixture = createFixture("repofit-journal-undo-installed-");
   try {
     applyFinding(fixture.root, fixture.finding, { kind: "worktree" });
@@ -316,7 +318,7 @@ test("recover finalizes an undo interrupted after original installation", () => 
   }
 });
 
-test("undo refuses to overwrite a newer working-tree edit", () => {
+writeTest("undo refuses to overwrite a newer working-tree edit", () => {
   const fixture = createFixture("repofit-journal-newer-edit-");
   try {
     applyFinding(fixture.root, fixture.finding, { kind: "worktree" });
@@ -330,7 +332,7 @@ test("undo refuses to overwrite a newer working-tree edit", () => {
   }
 });
 
-test("apply captures and preserves an edit made immediately before replacement", () => {
+writeTest("apply captures and preserves an edit made immediately before replacement", () => {
   const fixture = createFixture("repofit-journal-apply-race-");
   try {
     const newer = `${fixture.changed}\n// user edit during apply\n`;
@@ -347,7 +349,7 @@ test("apply captures and preserves an edit made immediately before replacement",
   }
 });
 
-test("undo captures and preserves an edit made immediately before restoration", () => {
+writeTest("undo captures and preserves an edit made immediately before restoration", () => {
   const fixture = createFixture("repofit-journal-undo-race-");
   try {
     const receipt = applyFinding(fixture.root, fixture.finding, { kind: "worktree" });
@@ -366,7 +368,7 @@ test("undo captures and preserves an edit made immediately before restoration", 
   }
 });
 
-test("a repository-wide operation lock blocks a second writer without changing source", () => {
+writeTest("a repository-wide operation lock blocks a second writer without changing source", () => {
   const fixture = createFixture("repofit-journal-lock-");
   try {
     applyFinding(fixture.root, fixture.finding, { kind: "worktree" });
@@ -399,7 +401,7 @@ test("a repository-wide operation lock blocks a second writer without changing s
   }
 });
 
-test("automatic replacement refuses a source with multiple hard links", () => {
+writeTest("automatic replacement refuses a source with multiple hard links", () => {
   const fixture = createFixture("repofit-journal-hardlink-");
   try {
     const aliasPath = join(fixture.root, "alias.ts");
@@ -416,7 +418,7 @@ test("automatic replacement refuses a source with multiple hard links", () => {
   }
 });
 
-test("automatic replacement respects a read-only source file", { skip: process.platform === "win32" }, () => {
+writeTest("automatic replacement respects a read-only source file", { skip: process.platform === "win32" }, () => {
   const fixture = createFixture("repofit-journal-readonly-");
   try {
     chmodSync(fixture.path, 0o444);
@@ -432,7 +434,7 @@ test("automatic replacement respects a read-only source file", { skip: process.p
   }
 });
 
-test("a lock whose owner process no longer exists is recovered once", () => {
+writeTest("a lock whose owner process no longer exists is recovered once", () => {
   const fixture = createFixture("repofit-journal-stale-lock-");
   try {
     applyFinding(fixture.root, fixture.finding, { kind: "worktree" });
@@ -469,7 +471,7 @@ test("a lock whose owner process no longer exists is recovered once", () => {
   }
 });
 
-test("undo refuses a tampered backup", () => {
+writeTest("undo refuses a tampered backup", () => {
   const fixture = createFixture("repofit-journal-tampered-backup-");
   try {
     const receipt = applyFinding(fixture.root, fixture.finding, { kind: "worktree" });
@@ -490,7 +492,7 @@ test("undo refuses a tampered backup", () => {
   }
 });
 
-test("receipt validation rejects a tampered receipt identifier before path construction", () => {
+writeTest("receipt validation rejects a tampered receipt identifier before path construction", () => {
   const fixture = createFixture("repofit-journal-tampered-receipt-");
   try {
     const receipt = applyFinding(fixture.root, fixture.finding, { kind: "worktree" });
@@ -512,7 +514,7 @@ test("receipt validation rejects a tampered receipt identifier before path const
   }
 });
 
-test("receipt decoder rejects unknown fields, non-canonical paths, and mixed states", () => {
+writeTest("receipt decoder rejects unknown fields, non-canonical paths, and mixed states", () => {
   const fixture = createFixture("repofit-journal-strict-schema-");
   try {
     const receipt = applyFinding(fixture.root, fixture.finding, { kind: "worktree" });
@@ -541,7 +543,7 @@ test("receipt decoder rejects unknown fields, non-canonical paths, and mixed sta
   }
 });
 
-test("repository identity prevents a receipt from being replayed in another identity", () => {
+writeTest("repository identity prevents a receipt from being replayed in another identity", () => {
   const fixture = createFixture("repofit-journal-repository-id-");
   try {
     applyFinding(fixture.root, fixture.finding, { kind: "worktree" });
@@ -559,7 +561,7 @@ test("repository identity prevents a receipt from being replayed in another iden
   }
 });
 
-test("a corrupted non-current history entry cannot hijack the latest receipt", () => {
+writeTest("a corrupted non-current history entry cannot hijack the latest receipt", () => {
   const fixture = createFixture("repofit-journal-history-isolation-");
   try {
     const first = applyFinding(fixture.root, fixture.finding, { kind: "worktree" });
@@ -584,7 +586,7 @@ test("a corrupted non-current history entry cannot hijack the latest receipt", (
   }
 });
 
-test("coordinated receipt and backup tampering cannot restore different code tokens", () => {
+writeTest("coordinated receipt and backup tampering cannot restore different code tokens", () => {
   const fixture = createFixture("repofit-journal-coordinated-tamper-");
   try {
     const receipt = applyFinding(fixture.root, fixture.finding, { kind: "worktree" });
@@ -615,7 +617,7 @@ test("coordinated receipt and backup tampering cannot restore different code tok
   }
 });
 
-test("unsafe receipt directory permissions are rejected", { skip: process.platform === "win32" }, () => {
+writeTest("unsafe receipt directory permissions are rejected", { skip: process.platform === "win32" }, () => {
   const fixture = createFixture("repofit-journal-permissions-");
   try {
     applyFinding(fixture.root, fixture.finding, { kind: "worktree" });
@@ -629,7 +631,7 @@ test("unsafe receipt directory permissions are rejected", { skip: process.platfo
   }
 });
 
-test("a schema 2 Alpha store is tightened and archived before the next recoverable fix", () => {
+writeTest("a schema 2 Alpha store is tightened and archived before the next recoverable fix", () => {
   const fixture = createFixture("repofit-journal-schema2-migration-");
   try {
     const gitDirectory = git(fixture.root, ["rev-parse", "--absolute-git-dir"]).trim();
@@ -659,7 +661,7 @@ test("a schema 2 Alpha store is tightened and archived before the next recoverab
   }
 });
 
-test("schema 2 migration resumes after identity creation without losing the legacy receipt", () => {
+writeTest("schema 2 migration resumes after identity creation without losing the legacy receipt", () => {
   const fixture = createFixture("repofit-journal-schema2-resume-");
   try {
     const gitDirectory = git(fixture.root, ["rev-parse", "--absolute-git-dir"]).trim();
@@ -695,7 +697,7 @@ test("schema 2 migration resumes after identity creation without losing the lega
   }
 });
 
-test("an unrecognized pre-identity receipt is preserved and blocks migration", () => {
+writeTest("an unrecognized pre-identity receipt is preserved and blocks migration", () => {
   const fixture = createFixture("repofit-journal-invalid-legacy-");
   try {
     const gitDirectory = git(fixture.root, ["rev-parse", "--absolute-git-dir"]).trim();
@@ -716,7 +718,7 @@ test("an unrecognized pre-identity receipt is preserved and blocks migration", (
   }
 });
 
-test("a non-terminal journal must be recovered before another fix can start", () => {
+writeTest("a non-terminal journal must be recovered before another fix can start", () => {
   const fixture = createFixture("repofit-journal-nonterminal-guard-");
   try {
     assert.throws(
@@ -747,7 +749,7 @@ test("a non-terminal journal must be recovered before another fix can start", ()
   }
 });
 
-test("receipt storage rejects invalid UTF-8 instead of replacing bytes", () => {
+writeTest("receipt storage rejects invalid UTF-8 instead of replacing bytes", () => {
   const fixture = createFixture("repofit-journal-invalid-utf8-");
   try {
     const receipt = applyFinding(fixture.root, fixture.finding, { kind: "worktree" });
@@ -768,7 +770,7 @@ test("receipt storage rejects invalid UTF-8 instead of replacing bytes", () => {
   }
 });
 
-test("automatic fixes refuse a backup larger than the per-file recovery limit", () => {
+writeTest("automatic fixes refuse a backup larger than the per-file recovery limit", () => {
   const fixture = createFixture("repofit-journal-backup-limit-");
   try {
     const oversized = `${fixture.changed}${" ".repeat(MAX_BACKUP_BYTES_PER_FILE)}`;
@@ -785,7 +787,7 @@ test("automatic fixes refuse a backup larger than the per-file recovery limit", 
   }
 });
 
-test("automatic fixes fail closed when recovery history reaches its record limit", () => {
+writeTest("automatic fixes fail closed when recovery history reaches its record limit", () => {
   const fixture = createFixture("repofit-journal-record-limit-");
   try {
     applyFinding(fixture.root, fixture.finding, { kind: "worktree" });
@@ -806,7 +808,7 @@ test("automatic fixes fail closed when recovery history reaches its record limit
   }
 });
 
-test("a persistent mode mismatch is not mislabeled as a verification-time race", { skip: process.platform === "win32" }, () => {
+writeTest("a persistent mode mismatch is not mislabeled as a verification-time race", { skip: process.platform === "win32" }, () => {
   const fixture = createFixture("repofit-verify-mode-label-");
   try {
     applyFinding(fixture.root, fixture.finding, { kind: "worktree" });
@@ -830,7 +832,7 @@ test("a persistent mode mismatch is not mislabeled as a verification-time race",
   }
 });
 
-test("undo is one-level and does not skip an aborted latest journal", () => {
+writeTest("undo is one-level and does not skip an aborted latest journal", () => {
   const fixture = createFixture("repofit-undo-one-level-");
   try {
     applyFinding(fixture.root, fixture.finding, { kind: "worktree" });
@@ -869,7 +871,7 @@ test("undo is one-level and does not skip an aborted latest journal", () => {
   }
 });
 
-test("CLI undo restores the worktree without changing a staged repaired blob", () => {
+writeTest("CLI undo restores the worktree without changing a staged repaired blob", () => {
   const fixture = createFixture("repofit-cli-undo-");
   try {
     const applied = spawnSync(
@@ -895,7 +897,7 @@ test("CLI undo restores the worktree without changing a staged repaired blob", (
   }
 });
 
-test("CLI recover explicitly finalizes an interrupted apply before verification", () => {
+writeTest("CLI recover explicitly finalizes an interrupted apply before verification", () => {
   const fixture = createFixture("repofit-cli-recover-");
   try {
     assert.throws(
@@ -920,7 +922,7 @@ test("CLI recover explicitly finalizes an interrupted apply before verification"
   }
 });
 
-test("verification fails when another RepoFit write changes the latest receipt", () => {
+writeTest("verification fails when another RepoFit write changes the latest receipt", () => {
   const fixture = createFixture("repofit-verify-snapshot-");
   try {
     const secondPath = join(fixture.root, "second.ts");

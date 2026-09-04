@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TAOMA-06/repofit-comments/schemas/doctor.schema.json",
+  "title": "RepoFit Comments doctor report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "type", "toolVersion", "rulePackVersion", "status", "repositoryRoot", "runtime", "configuration", "capabilities", "checks"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "type": { "const": "doctor" },
+    "toolVersion": { "type": "string" },
+    "rulePackVersion": { "const": "1.0.0" },
+    "status": { "enum": ["ok", "warning", "fail"] },
+    "repositoryRoot": { "type": "string" },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node", "platform", "architecture", "git"],
+      "properties": {
+        "node": { "type": "string" },
+        "platform": { "type": "string" },
+        "architecture": { "type": "string" },
+        "git": { "type": "string" }
+      }
+    },
+    "configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "path"],
+      "properties": {
+        "source": { "enum": ["defaults", "repository"] },
+        "path": { "type": "string" }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["readOnlyAnalysis", "automaticWrites"],
+      "properties": {
+        "readOnlyAnalysis": { "type": "boolean" },
+        "automaticWrites": { "type": "boolean" }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "status", "detail"],
+        "properties": {
+          "id": { "type": "string" },
+          "status": { "enum": ["pass", "warning", "fail"] },
+          "detail": { "type": "string" }
+        }
+      }
+    }
+  }
+}

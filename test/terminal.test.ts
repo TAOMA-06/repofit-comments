@@ -20,9 +20,11 @@ test("terminal text escapes control, OSC, and bidirectional formatting character
 test("terminal finding and preview never emit repository-controlled control characters", () => {
   const finding: Finding = {
     id: "RF-COM-SAFE",
+    fingerprint: "RF-FP-SAFE",
     ruleId: "comments.step-label",
     category: "Template step label",
     action: "remove-safe",
+    level: "error",
     relativePath: "src/evil\u001b[2J\u202E.ts",
     line: 4,
     endLine: 4,

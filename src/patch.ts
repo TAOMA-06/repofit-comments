@@ -17,6 +17,7 @@ import { sha256 } from "./hash.js";
 import type { Finding, FixReceipt, PreparedFixReceipt, Scope } from "./model.js";
 import { RECEIPT_SCHEMA_VERSION } from "./model.js";
 import { protectedCommentHash } from "./protection.js";
+import { automaticWriteBlockReason } from "./platform.js";
 import {
   acquireRepositoryWriteLock,
   assertCanCreateRecoveryRecord,
@@ -27,6 +28,7 @@ import {
   readLatestReceipt,
   writeBackup,
   writeReceiptState,
+  type RecoveryAdmissionLimits,
   type ReceiptStoreContext,
 } from "./receipt-store.js";
 import {
@@ -58,10 +60,16 @@ interface PatchExecutionOptions {
   faultStage?: PatchFaultStage;
   beforeSourceReplacement?: () => void;
   beforeUndoReplacement?: () => void;
+  recoveryLimits?: RecoveryAdmissionLimits;
 }
 
 interface VerifyExecutionOptions {
   afterReceiptRead?: () => void;
+}
+
+function assertAutomaticWritesSupported(): void {
+  const reason = automaticWriteBlockReason();
+  if (reason) throw new Error(reason);
 }
 
 export interface CandidateVerification {
@@ -109,7 +117,10 @@ function editForFinding(content: string, finding: Finding): FindingEdit {
   };
 }
 
-function candidateForFindings(content: string, findings: Finding[]): string {
+export function buildCandidateForFindings(
+  content: string,
+  findings: Finding[],
+): string {
   if (findings.length === 0) {
     throw new Error("At least one safe finding is required.");
   }
@@ -235,6 +246,7 @@ export function applyFindings(
       "Automatic fixes only support --worktree. Staged and base scopes are read-only.",
     );
   }
+  assertAutomaticWritesSupported();
   const first = findings[0];
   if (!first) {
     throw new Error("At least one safe finding is required.");
@@ -262,7 +274,7 @@ export function applyFindings(
       );
     }
 
-    const candidate = candidateForFindings(current, findings);
+    const candidate = buildCandidateForFindings(current, findings);
     const verification = verifyCandidate(first.relativePath, current, candidate);
     if (!verification.valid) {
       throw new Error(`Patch verification refused: ${verification.reasons.join(" ")}`);
@@ -288,7 +300,7 @@ export function applyFindings(
       syntaxTreeHash: verification.beforeSyntaxTreeHash,
       protectedCommentHash: verification.beforeProtectedCommentHash,
     };
-    assertCanCreateRecoveryRecord(store, beforeBytes.byteLength);
+    assertCanCreateRecoveryRecord(store, beforeBytes.byteLength, options.recoveryLimits);
     writeBackup(store, receiptId, beforeBytes);
     writeReceiptState(store, preparedReceipt);
     if (options.faultStage === "after-journal") {
@@ -349,6 +361,7 @@ export function undoLastFix(
   root: string,
   options: PatchExecutionOptions = {},
 ): FixReceipt {
+  assertAutomaticWritesSupported();
   const store = openReceiptStore(root);
   const operationId = randomUUID();
   const releaseLock = acquireRepositoryWriteLock(store, "<latest-receipt>", operationId);
@@ -427,6 +440,7 @@ export function undoLastFix(
 }
 
 export function recoverLastFix(root: string): FixReceipt {
+  assertAutomaticWritesSupported();
   const store = openReceiptStore(root);
   const operationId = randomUUID();
   const releaseLock = acquireRepositoryWriteLock(

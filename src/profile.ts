@@ -1,8 +1,9 @@
 import { dirname } from "node:path";
 
 import { countCodeLines, extractComments } from "./analyzer.js";
+import { pathIncluded, type RepoFitConfig } from "./config.js";
 import { wholeFileProtectionReason } from "./file-policy.js";
-import { listTrackedSourceFiles, readHeadContent } from "./git.js";
+import { listTrackedSourceFiles, readHeadContents, readHeadSizes } from "./git.js";
 import type { StyleProfile } from "./model.js";
 import { commentLanguage, normalizeComment, protectedReason } from "./protection.js";
 
@@ -21,15 +22,30 @@ function pathPriority(path: string, changedPaths: string[]): number {
   return 2;
 }
 
-export function buildStyleProfile(root: string, changedPaths: string[]): StyleProfile {
+export function buildStyleProfile(
+  root: string,
+  changedPaths: string[],
+  config?: RepoFitConfig,
+): StyleProfile {
   const changed = new Set(changedPaths);
   const candidates = listTrackedSourceFiles(root)
     .filter((path) => !changed.has(path))
+    .filter((path) => config === undefined || pathIncluded(config, path))
     .sort((left, right) => {
       const priority = pathPriority(left, changedPaths) - pathPriority(right, changedPaths);
       return priority === 0 ? left.localeCompare(right) : priority;
     })
-    .slice(0, MAX_PROFILE_FILES);
+    .slice(0, config?.limits.maxProfileFiles ?? MAX_PROFILE_FILES);
+  const sizes = readHeadSizes(root, candidates);
+  let selectedBytes = 0;
+  const eligibleCandidates = candidates.filter((relativePath) => {
+    const size = sizes.get(relativePath);
+    if (size === undefined) return false;
+    if (config && size > config.limits.maxFileBytes) return false;
+    if (config && selectedBytes + size > config.limits.maxTotalBytes) return false;
+    selectedBytes += size;
+    return true;
+  });
 
   let sampleFileCount = 0;
   let commentCount = 0;
@@ -40,39 +56,42 @@ export function buildStyleProfile(root: string, changedPaths: string[]): StylePr
   const commonPhrases: Record<string, number> = {};
   const examples: StyleProfile["examples"] = [];
 
-  for (const relativePath of candidates) {
-    const content = readHeadContent(root, relativePath);
-    if (content === undefined) {
-      continue;
-    }
-    if (wholeFileProtectionReason(relativePath, content) !== undefined) {
-      continue;
-    }
-
-    sampleFileCount += 1;
-    codeLineCount += countCodeLines(content);
-    const comments = extractComments(relativePath, content).filter(
-      (comment) => protectedReason(comment) === undefined,
-    );
-    commentCount += comments.length;
-
-    for (const comment of comments) {
-      totalCommentLength += comment.content.length;
-      const language = commentLanguage(comment.content);
-      if (language === "zh") chineseCount += 1;
-      if (language === "en") englishCount += 1;
-
-      const normalized = normalizeComment(comment.content);
-      if (normalized) {
-        commonPhrases[normalized] = (commonPhrases[normalized] ?? 0) + 1;
+  for (let offset = 0; offset < eligibleCandidates.length; offset += 16) {
+    const batchPaths = eligibleCandidates.slice(offset, offset + 16);
+    const headContents = readHeadContents(root, batchPaths);
+    for (const relativePath of batchPaths) {
+      const content = headContents.get(relativePath);
+      if (content === undefined) continue;
+      if (wholeFileProtectionReason(relativePath, content) !== undefined) {
+        continue;
       }
 
-      if (
-        examples.length < 8 &&
-        comment.content.length >= 8 &&
-        comment.content.length <= 120
-      ) {
-        examples.push({ relativePath, line: comment.line, text: comment.raw });
+      sampleFileCount += 1;
+      codeLineCount += countCodeLines(content);
+      const comments = extractComments(relativePath, content).filter(
+        (comment) =>
+          protectedReason(comment, config?.protect.phrases ?? []) === undefined,
+      );
+      commentCount += comments.length;
+
+      for (const comment of comments) {
+        totalCommentLength += comment.content.length;
+        const language = commentLanguage(comment.content);
+        if (language === "zh") chineseCount += 1;
+        if (language === "en") englishCount += 1;
+
+        const normalized = normalizeComment(comment.content);
+        if (normalized) {
+          commonPhrases[normalized] = (commonPhrases[normalized] ?? 0) + 1;
+        }
+
+        if (
+          examples.length < 8 &&
+          comment.content.length >= 8 &&
+          comment.content.length <= 120
+        ) {
+          examples.push({ relativePath, line: comment.line, text: comment.raw });
+        }
       }
     }
   }

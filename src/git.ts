@@ -1,8 +1,16 @@
-import { lstatSync, readFileSync, realpathSync } from "node:fs";
+import {
+  closeSync,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readSync,
+  realpathSync,
+} from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 import { decodeUtf8Bytes } from "./encoding.js";
+import { pathIncluded, type RepoFitConfig } from "./config.js";
 import { isSupportedSourcePath, wholeFileProtectionReason } from "./file-policy.js";
 import { sha256 } from "./hash.js";
 import type { LineRange, Scope, ScopedFile } from "./model.js";
@@ -63,18 +71,22 @@ interface GitProcessResult {
   stderr: string;
 }
 
+function gitArguments(args: string[]): string[] {
+  return [
+    "--no-pager",
+    "--no-optional-locks",
+    "-c",
+    "core.fsmonitor=false",
+    "-c",
+    "diff.external=",
+    ...args,
+  ];
+}
+
 function spawnGit(root: string, args: string[]): GitProcessResult {
   const result = spawnSync(
     "git",
-    [
-      "--no-pager",
-      "--no-optional-locks",
-      "-c",
-      "core.fsmonitor=false",
-      "-c",
-      "diff.external=",
-      ...args,
-    ],
+    gitArguments(args),
     {
       cwd: root,
       env: gitEnvironment(),
@@ -107,6 +119,33 @@ function spawnGit(root: string, args: string[]): GitProcessResult {
   };
 }
 
+function spawnGitBytes(root: string, args: string[], input: Uint8Array): Uint8Array {
+  const result = spawnSync("git", gitArguments(args), {
+    cwd: root,
+    env: gitEnvironment(),
+    input,
+    killSignal: "SIGKILL",
+    maxBuffer: MAX_GIT_OUTPUT,
+    timeout: GIT_TIMEOUT_MS,
+    windowsHide: true,
+  });
+  if (result.error) {
+    const error = result.error as NodeJS.ErrnoException;
+    if (error.code === "ETIMEDOUT") {
+      throw new Error(`git ${args[0] ?? "command"} timed out after ${GIT_TIMEOUT_MS}ms.`);
+    }
+    throw new Error(`Unable to run git: ${error.message}`);
+  }
+  if (result.status !== 0 || result.signal) {
+    const detail = decodeUtf8Bytes(
+      result.stderr,
+      `git ${args[0] ?? "command"} stderr`,
+    ).trim();
+    throw new Error(`git ${args[0] ?? "command"} failed: ${detail || "unknown error"}`);
+  }
+  return result.stdout;
+}
+
 function runGit(root: string, args: string[]): string {
   const result = spawnGit(root, args);
   if (result.status !== 0) {
@@ -127,6 +166,10 @@ export function discoverRepositoryRoot(startDirectory = process.cwd()): string {
 
 export function getAbsoluteGitDirectory(root: string): string {
   return runGit(root, ["rev-parse", "--absolute-git-dir"]).trim();
+}
+
+export function getGitVersion(root: string): string {
+  return runGit(root, ["--version"]).trim();
 }
 
 export function scopeLabel(scope: Scope): string {
@@ -189,7 +232,11 @@ function assertSafeWorkingTreePath(root: string, relativePath: string): string {
   return absolutePath;
 }
 
-export function listScopedPaths(root: string, scope: Scope): string[] {
+export function listScopedPaths(
+  root: string,
+  scope: Scope,
+  config?: RepoFitConfig,
+): string[] {
   const output = runGit(root, [
     ...diffPrefix(root, scope),
     "--name-only",
@@ -198,15 +245,23 @@ export function listScopedPaths(root: string, scope: Scope): string[] {
     "--",
   ]);
 
-  return splitNullTerminated(output).filter(isSupportedSourcePath).sort();
+  return splitNullTerminated(output)
+    .filter(isSupportedSourcePath)
+    .filter((path) => config === undefined || pathIncluded(config, path))
+    .sort();
 }
 
-function readScopedContent(root: string, scope: Scope, relativePath: string): string {
+export function readScopedFileContent(
+  root: string,
+  scope: Scope,
+  relativePath: string,
+  maxBytes = MAX_GIT_OUTPUT,
+): string {
   switch (scope.kind) {
     case "staged":
       return readIndexContent(root, relativePath);
     case "worktree":
-      return readWorkingTreeContent(root, relativePath);
+      return readWorkingTreeContent(root, relativePath, maxBytes);
     case "base":
       return runGit(root, ["show", `HEAD:${relativePath}`]);
   }
@@ -225,6 +280,41 @@ function readFileDiff(root: string, scope: Scope, relativePath: string): string 
     "--",
     relativePath,
   ]);
+}
+
+function readDiffRanges(
+  root: string,
+  scope: Scope,
+  relativePaths: string[],
+): Map<string, LineRange[]> {
+  const ranges = new Map<string, LineRange[]>();
+  const prefix = diffPrefix(root, scope);
+  const chunkSize = 32;
+  for (let offset = 0; offset < relativePaths.length; offset += chunkSize) {
+    const paths = relativePaths.slice(offset, offset + chunkSize);
+    const output = runGit(root, [
+      ...prefix,
+      "--unified=0",
+      "--no-color",
+      "--",
+      ...paths,
+    ]);
+    const sections = output.split(/^diff --git /mu).slice(1);
+    if (sections.length !== paths.length) {
+      for (const relativePath of paths) {
+        ranges.set(
+          relativePath,
+          parseAddedLineRanges(readFileDiff(root, scope, relativePath)),
+        );
+      }
+      continue;
+    }
+    sections.forEach((section, index) => {
+      const relativePath = paths[index];
+      if (relativePath) ranges.set(relativePath, parseAddedLineRanges(section));
+    });
+  }
+  return ranges;
 }
 
 export function parseAddedLineRanges(diff: string): LineRange[] {
@@ -247,17 +337,78 @@ export function parseAddedLineRanges(diff: string): LineRange[] {
   return ranges;
 }
 
-export function collectScopedFiles(root: string, scope: Scope): ScopedFile[] {
-  return listScopedPaths(root, scope).flatMap((relativePath) => {
-    const content = readScopedContent(root, scope, relativePath);
+export function collectScopedFiles(
+  root: string,
+  scope: Scope,
+  config?: RepoFitConfig,
+): ScopedFile[] {
+  const paths = listScopedPaths(root, scope, config);
+  if (config && paths.length > config.limits.maxFiles) {
+    throw new Error(
+      `The selected diff contains ${paths.length} supported files, above limits.maxFiles=${config.limits.maxFiles}.`,
+    );
+  }
+  const sizes = readScopedSizes(root, scope, paths);
+  let totalBytes = 0;
+  for (const relativePath of paths) {
+    const fileBytes = sizes.get(relativePath);
+    if (fileBytes === undefined) {
+      throw new Error(`Unable to determine source size for ${relativePath}.`);
+    }
+    if (config && fileBytes > config.limits.maxFileBytes) {
+      throw new Error(
+        `${relativePath} is ${fileBytes} bytes, above limits.maxFileBytes=${config.limits.maxFileBytes}.`,
+      );
+    }
+    totalBytes += fileBytes;
+    if (config && totalBytes > config.limits.maxTotalBytes) {
+      throw new Error(
+        `Selected source bytes exceed limits.maxTotalBytes=${config.limits.maxTotalBytes}.`,
+      );
+    }
+  }
+  const diffRanges = readDiffRanges(root, scope, paths);
+  const totalChangedLines = [...diffRanges.values()].reduce(
+    (total, fileRanges) =>
+      total +
+      fileRanges.reduce(
+        (fileTotal, range) => fileTotal + range.end - range.start + 1,
+        0,
+      ),
+    0,
+  );
+  if (config && totalChangedLines > config.limits.maxChangedLines) {
+    throw new Error(
+      `Selected changed lines exceed limits.maxChangedLines=${config.limits.maxChangedLines}.`,
+    );
+  }
+  const scopedContents =
+    scope.kind === "worktree"
+      ? undefined
+      : readObjectContents(
+          root,
+          paths.map((relativePath) => ({
+            relativePath,
+            objectName:
+              scope.kind === "staged" ? `:${relativePath}` : `HEAD:${relativePath}`,
+          })),
+        );
+  return paths.flatMap((relativePath) => {
+    const content =
+      scopedContents?.get(relativePath) ??
+      readScopedFileContent(
+        root,
+        scope,
+        relativePath,
+        config?.limits.maxFileBytes,
+      );
     if (wholeFileProtectionReason(relativePath, content) !== undefined) {
       return [];
     }
-    const addedRanges = parseAddedLineRanges(readFileDiff(root, scope, relativePath));
+    const addedRanges = diffRanges.get(relativePath) ?? [];
     if (addedRanges.length === 0) {
       return [];
     }
-
     return [
       {
         relativePath,
@@ -285,14 +436,181 @@ export function readHeadContent(root: string, relativePath: string): string | un
   return result.stdout ?? "";
 }
 
-export function readWorkingTreeContent(root: string, relativePath: string): string {
+function indexOfNull(bytes: Uint8Array, start: number): number {
+  for (let index = start; index < bytes.byteLength; index += 1) {
+    if (bytes[index] === 0) return index;
+  }
+  return -1;
+}
+
+function readObjectContents(
+  root: string,
+  objectNames: Array<{ relativePath: string; objectName: string }>,
+): Map<string, string> {
+  const contents = new Map<string, string>();
+  const chunkSize = 16;
+  for (let offset = 0; offset < objectNames.length; offset += chunkSize) {
+    const objects = objectNames.slice(offset, offset + chunkSize);
+    const input = Buffer.from(objects.map((item) => `${item.objectName}\0`).join(""), "utf8");
+    const output = spawnGitBytes(root, ["cat-file", "--batch", "-Z"], input);
+    let cursor = 0;
+    for (const item of objects) {
+      const headerEnd = indexOfNull(output, cursor);
+      if (headerEnd < 0) throw new Error("git cat-file returned an incomplete header.");
+      const header = decodeUtf8Bytes(
+        output.subarray(cursor, headerEnd),
+        `git cat-file header for ${item.relativePath}`,
+      );
+      cursor = headerEnd + 1;
+      if (header.endsWith(" missing")) continue;
+      const match = /^[0-9a-f]+ blob (\d+)$/.exec(header);
+      if (!match) throw new Error(`Unexpected git cat-file header for ${item.relativePath}.`);
+      const size = Number.parseInt(match[1] ?? "", 10);
+      const end = cursor + size;
+      if (!Number.isSafeInteger(size) || end >= output.byteLength || output[end] !== 0) {
+        throw new Error(`git cat-file returned invalid content framing for ${item.relativePath}.`);
+      }
+      contents.set(
+        item.relativePath,
+        decodeUtf8Bytes(
+          output.subarray(cursor, end),
+          `Git object ${item.objectName}`,
+        ),
+      );
+      cursor = end + 1;
+    }
+    if (cursor !== output.byteLength) {
+      throw new Error("git cat-file returned unexpected trailing bytes.");
+    }
+  }
+  return contents;
+}
+
+export function readHeadContents(
+  root: string,
+  relativePaths: string[],
+): Map<string, string> {
+  return readObjectContents(
+    root,
+    relativePaths.map((relativePath) => ({
+      relativePath,
+      objectName: `HEAD:${relativePath}`,
+    })),
+  );
+}
+
+function readObjectSizes(
+  root: string,
+  objectNames: Array<{ relativePath: string; objectName: string }>,
+): Map<string, number> {
+  const sizes = new Map<string, number>();
+  const chunkSize = 64;
+  for (let offset = 0; offset < objectNames.length; offset += chunkSize) {
+    const objects = objectNames.slice(offset, offset + chunkSize);
+    const input = Buffer.from(objects.map((item) => `${item.objectName}\0`).join(""), "utf8");
+    const output = spawnGitBytes(root, ["cat-file", "--batch-check", "-Z"], input);
+    let cursor = 0;
+    for (const item of objects) {
+      const headerEnd = indexOfNull(output, cursor);
+      if (headerEnd < 0) throw new Error("git cat-file returned an incomplete size header.");
+      const header = decodeUtf8Bytes(
+        output.subarray(cursor, headerEnd),
+        `git cat-file size header for ${item.relativePath}`,
+      );
+      cursor = headerEnd + 1;
+      if (header.endsWith(" missing")) continue;
+      const match = /^[0-9a-f]+ blob (\d+)$/.exec(header);
+      const size = Number.parseInt(match?.[1] ?? "", 10);
+      if (!match || !Number.isSafeInteger(size) || size < 0) {
+        throw new Error(`Unexpected git cat-file size for ${item.relativePath}.`);
+      }
+      sizes.set(item.relativePath, size);
+    }
+    if (cursor !== output.byteLength) {
+      throw new Error("git cat-file returned unexpected trailing size bytes.");
+    }
+  }
+  return sizes;
+}
+
+export function readHeadSizes(root: string, relativePaths: string[]): Map<string, number> {
+  return readObjectSizes(
+    root,
+    relativePaths.map((relativePath) => ({
+      relativePath,
+      objectName: `HEAD:${relativePath}`,
+    })),
+  );
+}
+
+function workingTreeFileSize(root: string, relativePath: string): number {
+  const path = assertSafeWorkingTreePath(root, relativePath);
+  const metadata = lstatSync(path);
+  if (metadata.isSymbolicLink() || !metadata.isFile()) {
+    throw new Error(`Refusing to read or rewrite a non-regular source file: ${relativePath}`);
+  }
+  return metadata.size;
+}
+
+function readScopedSizes(
+  root: string,
+  scope: Scope,
+  relativePaths: string[],
+): Map<string, number> {
+  if (scope.kind === "worktree") {
+    return new Map(
+      relativePaths.map((relativePath) => [
+        relativePath,
+        workingTreeFileSize(root, relativePath),
+      ]),
+    );
+  }
+  return readObjectSizes(
+    root,
+    relativePaths.map((relativePath) => ({
+      relativePath,
+      objectName: scope.kind === "staged" ? `:${relativePath}` : `HEAD:${relativePath}`,
+    })),
+  );
+}
+
+function readFileBytesBounded(path: string, maximumBytes: number): Uint8Array {
+  const descriptor = openSync(path, "r");
+  const chunks: Buffer[] = [];
+  let total = 0;
+  try {
+    const metadata = fstatSync(descriptor);
+    if (!metadata.isFile() || metadata.size > maximumBytes) {
+      throw new Error(`Source file exceeds the ${maximumBytes}-byte read limit.`);
+    }
+    const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, maximumBytes + 1));
+    while (true) {
+      const bytesRead = readSync(descriptor, buffer, 0, buffer.byteLength, null);
+      if (bytesRead === 0) break;
+      total += bytesRead;
+      if (total > maximumBytes) {
+        throw new Error(`Source file grew beyond the ${maximumBytes}-byte read limit.`);
+      }
+      chunks.push(Buffer.from(buffer.subarray(0, bytesRead)));
+    }
+  } finally {
+    closeSync(descriptor);
+  }
+  return Buffer.concat(chunks, total);
+}
+
+export function readWorkingTreeContent(
+  root: string,
+  relativePath: string,
+  maxBytes = MAX_GIT_OUTPUT,
+): string {
   const absolutePath = assertSafeWorkingTreePath(root, relativePath);
   const metadata = lstatSync(absolutePath);
   if (metadata.isSymbolicLink() || !metadata.isFile()) {
     throw new Error(`Refusing to read or rewrite a non-regular source file: ${relativePath}`);
   }
   return decodeUtf8Bytes(
-    readFileSync(absolutePath),
+    readFileBytesBounded(absolutePath, maxBytes),
     `Working-tree file ${relativePath}`,
   );
 }

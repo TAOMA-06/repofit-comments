@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TAOMA-06/repofit-comments/schemas/history.schema.json",
+  "title": "RepoFit Comments fix history",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "type", "latestReceiptId", "pendingPruneOperations", "entries"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "type": { "const": "fix-history" },
+    "latestReceiptId": { "type": "string", "format": "uuid" },
+    "pendingPruneOperations": { "type": "integer", "minimum": 0 },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["receiptId", "status", "relativePath", "preparedAt", "latest", "backupPresent", "backupBytes"],
+        "properties": {
+          "receiptId": { "type": "string", "format": "uuid" },
+          "status": { "enum": ["prepared", "applied", "undo-prepared", "undone", "aborted"] },
+          "relativePath": { "type": "string" },
+          "preparedAt": { "type": "string", "format": "date-time" },
+          "latest": { "type": "boolean" },
+          "backupPresent": { "type": "boolean" },
+          "backupBytes": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

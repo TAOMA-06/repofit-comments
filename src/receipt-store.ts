@@ -47,8 +47,15 @@ export interface ReceiptStoreContext {
   readonly backups: string;
   readonly locks: string;
   readonly legacy: string;
+  readonly prune: string;
   repositoryId: string | undefined;
   legacySchema2: boolean;
+}
+
+export interface RecoveryAdmissionLimits {
+  maxBackupBytes: number;
+  maxRecoveryRecords: number;
+  maxRecoveryBytes: number;
 }
 
 function contextForRoot(root: string): ReceiptStoreContext {
@@ -62,6 +69,7 @@ function contextForRoot(root: string): ReceiptStoreContext {
     backups: join(data, "backups"),
     locks: join(data, "locks"),
     legacy: join(data, "legacy"),
+    prune: join(data, "prune"),
     repositoryId: undefined,
     legacySchema2: false,
   };
@@ -192,11 +200,28 @@ export function createReceiptStore(root: string): ReceiptStoreContext {
   ensurePrivateDirectory(store.receipts);
   ensurePrivateDirectory(store.backups);
   ensurePrivateDirectory(store.locks);
+  ensurePrivateDirectory(store.prune);
   store.legacySchema2 = legacySchema2;
   return store;
 }
 
 export function initializeReceiptStoreForWrite(store: ReceiptStoreContext): string {
+  if (existsSync(store.prune)) {
+    const handle = opendirSync(store.prune);
+    try {
+      let entry = handle.readSync();
+      while (entry !== null) {
+        if (entry.isFile() && entry.name.endsWith(".marker.json")) {
+          throw new Error(
+            "An interrupted history prune must be resumed with history prune --apply before applying another fix.",
+          );
+        }
+        entry = handle.readSync();
+      }
+    } finally {
+      handle.closeSync();
+    }
+  }
   if (store.legacySchema2) {
     archiveLegacyReceipt(store);
     return ensureRepositoryId(store);
@@ -232,6 +257,7 @@ export function openReceiptStore(root: string): ReceiptStoreContext {
   validatePrivateDirectory(store.receipts);
   validatePrivateDirectory(store.backups);
   validatePrivateDirectory(store.locks);
+  if (existsSync(store.prune)) validatePrivateDirectory(store.prune);
   store.repositoryId = readRepositoryId(store);
   if (store.legacySchema2) return store;
   return store;
@@ -321,6 +347,7 @@ function scanRecoveryUsage(store: ReceiptStoreContext): RecoveryUsage {
     ["backups", { path: store.backups, countAsReceipt: false }],
     ["locks", { path: store.locks, countAsReceipt: false }],
     ["legacy", { path: store.legacy, countAsReceipt: false }],
+    ["prune", { path: store.prune, countAsReceipt: false }],
   ]);
   const rootHandle = opendirSync(store.data);
   try {
@@ -356,19 +383,41 @@ function scanRecoveryUsage(store: ReceiptStoreContext): RecoveryUsage {
 export function assertCanCreateRecoveryRecord(
   store: ReceiptStoreContext,
   backupBytes: number,
+  limits: RecoveryAdmissionLimits = {
+    maxBackupBytes: MAX_BACKUP_BYTES_PER_FILE,
+    maxRecoveryRecords: MAX_RECOVERY_RECORDS,
+    maxRecoveryBytes: MAX_RECOVERY_BYTES,
+  },
 ): void {
-  if (backupBytes > MAX_BACKUP_BYTES_PER_FILE) {
+  const maxBackupBytes = Math.min(
+    limits.maxBackupBytes,
+    MAX_BACKUP_BYTES_PER_FILE,
+  );
+  const maxRecoveryRecords = Math.min(
+    limits.maxRecoveryRecords,
+    MAX_RECOVERY_RECORDS,
+  );
+  const maxRecoveryBytes = Math.min(
+    limits.maxRecoveryBytes,
+    MAX_RECOVERY_BYTES,
+  );
+  if (backupBytes > maxBackupBytes) {
     throw new Error(
-      `Automatic fixes refuse files larger than ${MAX_BACKUP_BYTES_PER_FILE} bytes because their recovery backup would exceed the per-file limit.`,
+      `Automatic fixes refuse files larger than ${maxBackupBytes} bytes because their recovery backup would exceed the configured per-file limit.`,
     );
   }
   const usage = scanRecoveryUsage(store);
+  if (usage.receiptCount >= maxRecoveryRecords) {
+    throw new Error(
+      `RepoFit recovery history reached ${maxRecoveryRecords} records. Review and prune old terminal receipts before applying another fix; RepoFit never deletes recovery data automatically.`,
+    );
+  }
   if (
     usage.bytes + backupBytes + MAX_RECEIPT_BYTES * 2 >
-    MAX_RECOVERY_BYTES
+    maxRecoveryBytes
   ) {
     throw new Error(
-      `RepoFit recovery data would exceed ${MAX_RECOVERY_BYTES} bytes. Review and manually archive old terminal receipts before applying another fix; RepoFit never deletes recovery data automatically.`,
+      `RepoFit recovery data would exceed ${maxRecoveryBytes} bytes. Review and prune old terminal receipts before applying another fix; RepoFit never deletes recovery data automatically.`,
     );
   }
 }

@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TAOMA-06/repofit-comments/schemas/analysis-report.schema.json",
+  "title": "RepoFit Comments analysis report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "toolVersion", "rulePackVersion", "generatedAt", "repositoryRoot", "scope", "profile", "files", "findings", "protections", "suppressions", "summary"],
+  "properties": {
+    "schemaVersion": { "const": "2.0" },
+    "toolVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$" },
+    "rulePackVersion": { "const": "1.0.0" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "repositoryRoot": { "type": "string", "minLength": 1 },
+    "scope": { "$ref": "#/$defs/scope" },
+    "profile": { "$ref": "#/$defs/profile" },
+    "files": { "type": "array", "items": { "$ref": "#/$defs/file" } },
+    "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+    "protections": { "type": "array", "items": { "$ref": "#/$defs/protection" } },
+    "suppressions": { "type": "array", "items": { "$ref": "#/$defs/suppression" } },
+    "summary": { "$ref": "#/$defs/summary" }
+  },
+  "$defs": {
+    "scope": {
+      "oneOf": [
+        { "type": "object", "additionalProperties": false, "required": ["kind"], "properties": { "kind": { "const": "staged" } } },
+        { "type": "object", "additionalProperties": false, "required": ["kind"], "properties": { "kind": { "const": "worktree" } } },
+        { "type": "object", "additionalProperties": false, "required": ["kind", "ref"], "properties": { "kind": { "const": "base" }, "ref": { "type": "string", "minLength": 1 } } }
+      ]
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "sampleFileCount", "commentCount", "codeLineCount", "commentDensity", "averageCommentLength", "dominantLanguage", "commonPhrases", "examples"],
+      "properties": {
+        "status": { "enum": ["ready", "insufficient-style-baseline"] },
+        "sampleFileCount": { "type": "integer", "minimum": 0 },
+        "commentCount": { "type": "integer", "minimum": 0 },
+        "codeLineCount": { "type": "integer", "minimum": 0 },
+        "commentDensity": { "type": "number", "minimum": 0 },
+        "averageCommentLength": { "type": "number", "minimum": 0 },
+        "dominantLanguage": { "enum": ["zh", "en", "mixed", "unknown"] },
+        "commonPhrases": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 1 } },
+        "examples": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["relativePath", "line", "text"],
+            "properties": {
+              "relativePath": { "type": "string", "minLength": 1 },
+              "line": { "type": "integer", "minimum": 1 },
+              "text": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relativePath", "changedCommentCount", "protectedCommentCount", "parseErrorCount"],
+      "properties": {
+        "relativePath": { "type": "string", "minLength": 1 },
+        "changedCommentCount": { "type": "integer", "minimum": 0 },
+        "protectedCommentCount": { "type": "integer", "minimum": 0 },
+        "parseErrorCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "fingerprint", "ruleId", "category", "action", "level", "relativePath", "line", "endLine", "original", "reason", "evidence", "sourceHash", "commentStart", "commentEnd", "removeStart", "removeEnd"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^RF-COM-[0-9A-F]{12}$" },
+        "fingerprint": { "type": "string", "pattern": "^RF-FP-[0-9A-F]{12}$" },
+        "ruleId": { "type": "string", "pattern": "^comments\\.[a-z0-9-]+$" },
+        "category": { "type": "string", "minLength": 1 },
+        "action": { "enum": ["remove-safe", "rewrite-safe", "rewrite-suggested", "keep-protected", "uncertain"] },
+        "level": { "enum": ["info", "warning", "error"] },
+        "relativePath": { "type": "string", "minLength": 1 },
+        "line": { "type": "integer", "minimum": 1 },
+        "endLine": { "type": "integer", "minimum": 1 },
+        "original": { "type": "string" },
+        "reason": { "type": "string", "minLength": 1 },
+        "evidence": { "type": "array", "items": { "type": "string" } },
+        "suggestedReplacement": { "type": "string" },
+        "sourceHash": { "$ref": "#/$defs/hash" },
+        "commentStart": { "type": "integer", "minimum": 0 },
+        "commentEnd": { "type": "integer", "minimum": 0 },
+        "removeStart": { "type": "integer", "minimum": 0 },
+        "removeEnd": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "protection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "fingerprint", "relativePath", "line", "endLine", "original", "reason"],
+      "properties": {
+        "action": { "const": "keep-protected" },
+        "fingerprint": { "type": "string", "pattern": "^RF-PRO-[0-9A-F]{12}$" },
+        "relativePath": { "type": "string", "minLength": 1 },
+        "line": { "type": "integer", "minimum": 1 },
+        "endLine": { "type": "integer", "minimum": 1 },
+        "original": { "type": "string" },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "suppression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relativePath", "directiveLine", "targetLine", "ruleId", "reason"],
+      "properties": {
+        "relativePath": { "type": "string", "minLength": 1 },
+        "directiveLine": { "type": "integer", "minimum": 1 },
+        "targetLine": { "type": "integer", "minimum": 1 },
+        "ruleId": { "type": "string", "pattern": "^comments\\.[a-z0-9-]+$" },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["analyzedFileCount", "changedCommentCount", "protectedCommentCount", "removeSafeCount", "rewriteSafeCount", "rewriteSuggestedCount", "parseErrorCount", "displayedFindingLimit"],
+      "properties": {
+        "analyzedFileCount": { "type": "integer", "minimum": 0 },
+        "changedCommentCount": { "type": "integer", "minimum": 0 },
+        "protectedCommentCount": { "type": "integer", "minimum": 0 },
+        "removeSafeCount": { "type": "integer", "minimum": 0 },
+        "rewriteSafeCount": { "type": "integer", "minimum": 0 },
+        "rewriteSuggestedCount": { "type": "integer", "minimum": 0 },
+        "parseErrorCount": { "type": "integer", "minimum": 0 },
+        "displayedFindingLimit": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

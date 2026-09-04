@@ -1,6 +1,6 @@
 # RepoFit Comments security model
 
-Status: v0.2 design boundary
+Status: 1.0.0-rc.1 technical security boundary
 
 Date: 2026-09-04
 
@@ -53,13 +53,13 @@ The no-clobber design deliberately has a brief interval between displacement and
 
 The current implementation preserves exact source bytes and the low POSIX permission bits, and refuses source files with multiple hard links. It does not yet prove preservation of ACLs, extended attributes, ownership, Windows DACLs, macOS metadata, network-filesystem semantics, or every antivirus/file-indexer interaction.
 
-Until the real Linux/macOS/Windows matrix and metadata fixtures pass, automatic writes remain Beta work and must not be described as cross-platform production-safe.
+Automatic writes are enabled only on POSIX in this RC. Windows remains read-only until DACL privacy, no-clobber replacement, recovery, and metadata fixtures pass; the configured Windows matrix must prove both read-only behavior and explicit write refusal.
 
 ## Recovery-data privacy
 
 Backups can contain proprietary code, secrets, or comments that the user later removes from the working tree. They live under `.git/repofit-comments/backups/`, are never staged by Git, and use enforced private modes on POSIX. Windows DACL privacy remains unverified, so these files must still be treated as sensitive local data on every platform.
 
-Admission of a new automatic write fails closed when one backup would exceed 2 MiB, history reaches 200 receipts, or total recovery data would exceed 64 MiB. A previously admitted receipt may still transition during undo/recovery even when storage is later filled, so quota enforcement does not strand an interrupted journal. RepoFit never deletes recovery data automatically. Before v1, RepoFit must add a retention/list/prune command that never removes a backup referenced by a non-terminal journal or the latest pointer. Users who manually delete recovery data accept that the corresponding fix can no longer be undone.
+Admission of a new automatic write fails closed when one backup would exceed 2 MiB, history reaches 200 receipts, or total recovery data would exceed 64 MiB. A previously admitted receipt may still transition during undo/recovery even when storage is later filled, so quota enforcement does not strand an interrupted journal. `history list` exposes the bounded store. `history prune` previews by default, never selects the latest or a non-terminal journal, moves paired receipt/backup files behind a durable marker before deletion, and resumes interrupted pruning before starting new work. Users who manually delete recovery data outside that workflow accept that the corresponding fix can no longer be undone.
 
 Schema 2 Alpha receipts had no byte-exact backup and therefore cannot support safe undo. The next schema 3 write tightens the POSIX data-directory mode, preserves the old receipt under `legacy/`, and starts repository-bound recoverable history without treating the old receipt as schema 3 evidence.
 

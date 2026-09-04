@@ -1,6 +1,6 @@
 # RepoFit Comments V1 产品规格
 
-状态：Draft
+状态：Technical RC specification；本文件是 v1 产品与证据门槛的唯一规范来源
 
 研究与事实截点：2026-09-04
 
@@ -27,14 +27,14 @@ RepoFit Comments 不进入“通用 AI slop 扫描器”或“AI 作者鉴定器
 
 ### 3.1 RepoFit Comments 当前已确认事实
 
-以下事实来自当前仓库，不代表尚未完成的 1.0 能力：
+以下事实来自当前产品化分支，不代表尚未完成的外部发布与用户证据：
 
-- 当前为公开 GitHub Alpha，尚未发布 npm、Homebrew、签名二进制或生产发行版。
+- 当前源码 manifest 为 `1.0.0-rc.1`，但尚未发布 npm、Homebrew、签名二进制或生产发行版；公开远端仍需重新核验。
 - 当前产品化分支支持 TypeScript 家族 `.ts`、`.tsx`、`.mts` 和 `.cts`，只分析 staged、worktree 或相对 base ref 的 Git 变更中的新增/修改注释。
 - `check`、`preview`、`profile` 和 `explain` 为离线只读操作；自动写入只允许单 finding 或单文件安全 finding 集合，并要求显式 `--worktree --apply`。
 - 写入前检查 parse diagnostics、非注释 token hash、去注释语法树 hash、受保护注释 hash 和源文件 hash；写入使用可恢复的 no-clobber 事务并留下私有 journal、backup 与 receipt。源路径在替换中有短暂缺失窗口，不声称是原子 rename。
 - 当前保护许可证、归属、JSDoc、块注释、工具指令、生成标记、URL/issue/TODO、兼容性、安全、隐私、并发、迁移、格式/单位/版本约束、理由性注释和疑似注释代码；不确定时保留。
-- 当前产品化分支有 85 个自动化测试通过，并用最终干净安装包复跑 Grok 4.5 fixture；公开 `main` 仍是较早的 30-test Alpha。这些仍不是统计有效的 precision/recall 研究，也没有维护者盲审结论。
+- 当前产品化分支已经实现静态配置、SARIF、真实 diff、稳定 fingerprint、保护/抑制证据、资源上限、history retention、Action 与 RC 制品链；最终测试数字以 [STATUS](../../STATUS.md) 为准。这些仍不是统计有效的 precision/recall 研究，也没有维护者盲审结论。
 
 仓库证据：[README](../../README.md)、[STATUS](../../STATUS.md)、[写入验证实现](../../src/patch.ts)、[Grok 4.5 样例](../../evidence/grok-4.5-eval-2026-09-03.md)。
 
@@ -150,7 +150,7 @@ V1 至少维持当前保护类别，并增加以下产品要求：
 
 ### 7.4 配置
 
-V1 提供静态、不可执行的仓库配置文件，例如 `.repofit.yml`，至少支持：
+V1 提供静态、不可执行的仓库配置文件 `.repofit.json`，至少支持：
 
 - 路径 include/exclude；
 - 规则启停与 suggestion 严格度；
@@ -193,7 +193,7 @@ receipt 是安全证据，不是“运行行为完全等价”或“被删注释
 - npm provenance、签名 Git tag、checksums 和可复现的 package smoke test；
 - 固定版本 GitHub Action；
 - Node.js 22 与 24；
-- macOS、Ubuntu/Linux 和 Windows 的 CI、安装、扫描、dry-run、apply、verify 测试；
+- macOS 与 Ubuntu/Linux 的安装、扫描、dry-run、apply、verify 测试；Windows 的安装、扫描、preview、SARIF 与明确写入拒绝测试。Windows 自动写入只有在 DACL 和 no-clobber 证据通过后才可启用；
 - 安装、升级、卸载、迁移、故障排查、安全报告和支持策略文档。
 
 Homebrew 不是 1.0 阻塞项；只有在 npm 发行稳定后再增加，避免同时维护过多渠道。
@@ -232,7 +232,7 @@ Homebrew 不是 1.0 阻塞项；只有在 npm 发行稳定后再增加，避免�
 - 至少 200 个真实开发 diff，包含人写、AI-assisted 和来源未知的变化；评估时不要求也不尝试判断作者。
 - 至少 500 条进入 `remove-safe` / `rewrite-safe` 候选集的真实注释。
 - 至少 5 位非项目作者的维护者或高级工程师进行盲标，标签为 keep/rewrite/remove，并记录分歧。
-- 每条自动规则单独报告 precision、样本数和置信区间；不得只报告总体准确率。
+- 每条自动规则单独报告 precision、样本数和置信区间，且 precision 目标 ≥98%；不得只报告总体准确率。
 - 自动写入候选的盲审接受率目标 ≥98%；任何许可证、工具指令、API 文档、安全/兼容性理由或其他核心 protected comment 的误删均为 release blocker。
 
 ### 9.2 写入安全
@@ -246,7 +246,7 @@ Homebrew 不是 1.0 阻塞项；只有在 npm 发行稳定后再增加，避免�
 ### 9.3 分发与运行
 
 - npm 干净安装、`npx`、项目 devDependency 和 GitHub Action 四条路径均通过 smoke test。
-- Node 22/24 × macOS/Linux/Windows 支持矩阵通过；未运行的平台不得标记支持。
+- Node 22/24 × macOS/Linux 的读写矩阵通过；Windows 的只读矩阵与写入拒绝矩阵通过。未运行的平台或能力不得标记支持。
 - 发布 SHA、npm tarball integrity、GitHub tag 和 CI evidence 可相互绑定。
 - 运行时依赖审计无已知 critical/high 漏洞；任何例外必须有公开、限时的风险接受记录。
 

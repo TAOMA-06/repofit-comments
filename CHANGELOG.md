@@ -4,6 +4,16 @@ All notable changes to RepoFit Comments are documented here. Versions follow Sem
 
 ## Unreleased
 
+## 1.0.0-rc.1 - 2026-09-04
+
+### Added
+
+- Add the static `.repofit.json` configuration contract, top-level CLI aliases, `init`, `doctor`, `--print-config`, `--no-color`, rule levels, fail thresholds, path filters, extra protection, and bounded analysis resources.
+- Add stable finding fingerprints, visible protected-comment reasons, reason-required inline suppressions, SARIF 2.1 output, shipped JSON Schemas, and real unified-diff previews.
+- Add batch HEAD-blob reads, a measured 10,000 changed-line performance gate, dry-run-first history listing/pruning, and recoverable prune markers.
+- Add a version-pinned consumer GitHub Action example and a build-once RC workflow with six tarball smoke jobs, SPDX SBOM, checksums, artifact attestations, and optional npm staged publishing.
+- Keep Windows read-only for v1.0 RC until DACL privacy and no-clobber write semantics have independent evidence.
+
 ### Security
 
 - Harden Git subprocesses against external diff, textconv, environment configuration injection, lazy fetching, prompts, optional locks, replace objects, fsmonitor, and pager execution.

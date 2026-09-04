@@ -94,7 +94,7 @@ Goal: let a new user get a trustworthy result in under two minutes.
 Requirements:
 
 - Simplify the stable command surface while preserving compatibility with the Alpha commands.
-- Add a pure-data, versioned `.repofit.yml` schema with include/exclude, protection patterns, rule levels, `fail-on`, and resource limits.
+- Add a pure-data, versioned `.repofit.json` schema with include/exclude, protection patterns, rule levels, `fail-on`, and resource limits.
 - Add `init`, `doctor`, `--print-config`, `--no-color`, and real unified-diff previews.
 - Separate stable finding fingerprints from source snapshot hashes.
 - Add JSON Schema and SARIF 2.1 output with stable rule metadata.
@@ -134,8 +134,8 @@ Exit gate:
 - Non-comment token or syntax-tree changes: zero.
 - Identified protected-comment loss: zero.
 - Parse failures caused by fixes: zero.
-- Per-rule automatic-fix precision: at least 95%.
-- Automatic-fix acceptance: at least 85%.
+- Per-rule automatic-fix precision: at least 98%, with sample size and confidence interval reported for every automatic rule.
+- Automatic-fix blind-review acceptance: at least 98%.
 - High-quality human control diffs with no proposed automatic change: at least 95%.
 - Cleanup preferred in blind maintainer review: at least 70%.
 
@@ -145,7 +145,7 @@ Goal: prove installation, operation, release, and rollback as one reproducible s
 
 Requirements:
 
-- Ten maintainers use the RC on real work for at least one week.
+- Ten maintainers use the RC on real work for at least two weeks.
 - At least 60% use it again after the first successful run.
 - Linux, macOS, and Windows release matrices are green on every supported Node LTS major.
 - npm trusted publishing uses GitHub-hosted OIDC and produces provenance; no long-lived write token remains.
@@ -197,11 +197,11 @@ Pivot to a plugin or rule pack for an existing scanner when either condition hol
 - maintainers do not value the proof receipt or staged verification;
 - fewer than half of labeled AI-assisted diffs contain an actionable comment change.
 
-Stop independent product work when automatic-fix acceptance remains below 50% after two calibration rounds, or when protected-intent loss cannot be held at zero.
+Go, pivot, and stop decisions use the thresholds in [V1_PRODUCT_SPEC.md](./V1_PRODUCT_SPEC.md), which is the sole normative source. This execution plan does not define a second acceptance threshold. Protected-intent loss remaining above zero is always a stop condition.
 
 ## Current next action
 
-The Phase A implementation is locally green. The next action is to push the product branch only after explicit user authorization, open a reviewable pull request, and require the six-job operating-system/Node matrix. Do not publish an npm package, tag, GitHub Release, or Homebrew formula until that remote gate is green and the user separately authorizes the release action.
+The Phase A and technical Phase B/RC implementations are locally complete. The next action is to push the product branch only after explicit user authorization, open a reviewable pull request, and run the configured operating-system/Node and build-once release matrices. Do not stage or publish npm, create a tag, approve a staged package, create a GitHub Release, or add Homebrew until the corresponding remote and external evidence gates pass and the user separately authorizes that exact action.
 
 Current Phase A implementation status:
 
@@ -215,3 +215,13 @@ Current Phase A implementation status:
 - [x] Build the npm tarball from a clean isolated tree and validate its exact file allowlist.
 - [x] Escape terminal control and bidirectional characters.
 - [x] Publish versioned JSON errors, strict command arguments, a package-derived CLI version, and a stable exit-code contract.
+
+Current technical v1 candidate status:
+
+- [x] Add `.repofit.json`, include/exclude, additive protection, rule levels, fail thresholds, display defaults, and hard analysis/recovery limits.
+- [x] Add top-level compatibility-preserving commands, `init`, `doctor`, `--print-config`, `--no-color`, JSON, SARIF 2.1, and real unified-diff previews.
+- [x] Separate stable finding fingerprints from source snapshot IDs and expose protection/suppression evidence.
+- [x] Remove per-comment SourceFile creation, batch HEAD blob reads, and verify the 10,000 changed-line local benchmark below ten seconds.
+- [x] Add dry-run-first history list/prune with latest/non-terminal protection and recoverable prune markers.
+- [x] Add shipped machine-output schemas, a consumer GitHub Action, a build-once six-matrix release workflow, SPDX SBOM, checksums, release manifest, attestations, and optional npm staged publishing.
+- [x] Keep Windows automatic writes disabled until its separate security gate passes.

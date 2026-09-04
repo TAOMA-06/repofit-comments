@@ -1,10 +1,10 @@
 # RepoFit Comments v1 发布策略
 
-状态：Proposed
+状态：Technical RC pipeline implemented locally；external release gates open
 
 研究截止：2026-09-04（Asia/Shanghai）
 
-本文定义 RepoFit Comments 从公开 Alpha 走向 Beta、RC 和正式 `1.0.0` 的分发、供应链、验证与回滚要求。它是一份未来发布规范，不是当前完成证明；任何阶段名称都必须由对应证据支持。
+本文定义 RepoFit Comments 从公开 Alpha 走向 Beta、RC 和正式 `1.0.0` 的分发、供应链、验证与回滚要求。[V1_PRODUCT_SPEC.md](./V1_PRODUCT_SPEC.md) 是效果、安全和用户门槛的唯一规范来源；本文只定义各阶段如何取得并发布那些证据。任何阶段名称都必须由对应证据支持。
 
 ## 1. 发布决策
 
@@ -19,13 +19,12 @@ RepoFit Comments v1 采用以下分发顺序：
 
 ## 2. 当前基线与未完成项
 
-截至本文编写时，仓库仍应被视为公开 Alpha，而不是 npm、Homebrew 或正式产品发布。以下项目是 v1 工作，不得表述为已经完成：
+截至本文更新时，本地源码是 `1.0.0-rc.1` technical candidate，而不是已公开的 npm、Homebrew 或稳定产品。以下工程能力已经落地，但远端执行结果仍不得表述为完成证明：
 
-- `package.json` 仍为 `0.1.0` 且设置了 `"private": true`，npm 会拒绝发布带有该字段的包。参见 [npm package.json 文档](https://docs.npmjs.com/files/package.json/)。
-- CLI 代码中另有硬编码版本号，尚未建立 package、lockfile、CLI 输出与 Git tag 的单一版本源。
-- 常规 CI 只验证 Ubuntu 和 Node.js 22；尚未形成 Windows、macOS、Node.js 24 的支持证据。
-- 现有 CI 只做 `npm pack --dry-run`，没有在每个平台安装同一份真实 tarball 后运行端到端 smoke。
-- 尚无 npm 可信发布、provenance、SBOM、GitHub Artifact Attestation、不可变 Release 或发行回滚演练。
+- manifest 与 lockfile 已切换为 `1.0.0-rc.1`，CLI 从 manifest 读取版本，并设置显式 npm public registry、access 与 `next` tag；尚未执行 registry 写入。
+- 常规 CI 与 release workflow 已配置 Node 22/24 × macOS/Linux/Windows；这些 job 尚未在远端运行。
+- release workflow 已实现 build-once、同 tarball 六矩阵 smoke、SPDX SBOM、SHA256SUMS、release manifest、Artifact Attestation 和可选 `npm stage publish`；尚无远端 attestation 或 staged package。
+- Windows RC 仅支持只读扫描、preview、doctor、JSON/SARIF，并明确拒绝 apply/undo/recover；这不是 Windows 写入安全证据。
 - 现有公开 smoke 和单次模型样例不能替代多仓库标注语料、维护者盲评和真实用户重复使用证据。
 
 ## 3. 阶段定义
@@ -64,11 +63,11 @@ Beta 可以公开供目标用户试用，但文档必须继续声明语言范围
 RC 表示 v1 功能、CLI 命令、退出码、JSON schema 和安全契约已经冻结，只接受阻塞发布的问题修复。进入 RC 前要求：
 
 - Beta 的全部安全门槛持续通过。
-- `remove-safe` 精确率不低于 90%，确定性痕迹召回率不低于 70%，`remove-safe` 接受率不低于 80%。
+- 每条自动规则 precision 与自动修复盲审接受率均不低于 98%，并报告样本数与置信区间。
 - 匿名 A/B 中清理版被认为更符合仓库的比例不低于 70%；样本足够时，95% 置信区间下限高于 50%。
-- 高质量人工控制组的“无需修改”率不低于 90%。
-- 1,000 行以内 Diff 的检查耗时 P95 小于 10 秒。
-- 至少 5 名目标用户在各自不少于 5 个真实 Diff 中使用；至少 3 人连续两周主动重复使用。
+- 高质量人工控制组的“无需修改”率不低于 95%。
+- 10,000 changed lines 的参考机检查耗时小于 10 秒；另行记录 100-file diff 的 P95，稳定版目标小于 5 秒。
+- 至少 10 名目标维护者连续两周在真实工作中使用；第二周复用率不低于 60%，或至少 3 个独立团队采用固定版本 CI。
 - 发布、验证和回滚 runbook 已在 RC 上真实演练。
 
 ### 3.3 正式 1.0
@@ -89,8 +88,8 @@ RC 表示 v1 功能、CLI 命令、退出码、JSON schema 和安全契约已经
 
 公开文档应区分三种使用方式：
 
-- Beta 试用：`npx repofit-comments@beta comments check --staged`
-- 稳定版一次性运行：`npx repofit-comments@1 comments check --staged`
+- Beta/RC 试用：`npx repofit-comments@next check --staged`
+- 稳定版一次性运行：`npx repofit-comments@1 check --staged`
 - 高频使用：`npm install --global repofit-comments@1`，随后运行 `repofit ...`
 
 CI、教学材料和可复现实验必须固定精确版本，例如 `repofit-comments@1.0.0`，不得依赖可移动的 `latest`。npm 的 `npx` 会从包的单一 `bin` 字段推断要运行的命令；详细行为见 [npm exec/npx 官方文档](https://docs.npmjs.com/cli/v11/commands/npm-exec/)。
@@ -101,8 +100,8 @@ npm 的 staged publishing 和 trusted publisher 都要求包已经存在。因�
 
 1. 确认最终包名；若无作用域名称不可用，则在发布前改为拥有并控制的公共 scope。
 2. 用户启用 npm 账号级双因素认证。
-3. 从已验证的 Beta tag 构建 `0.2.0-beta.1` tarball。
-4. 用户在本地已认证会话中以 2FA 将该 tarball发布到显式 `beta` dist-tag；不得写入 `latest`。
+3. 从已验证的 RC tag 构建 `1.0.0-rc.N` tarball，并核对 release manifest、SBOM 与 SHA256SUMS。
+4. 用户在本地已认证会话中以 2FA 将该 tarball 发布到显式 `next` dist-tag；不得写入 `latest`。这是首次包引导的人工例外，不能由当前 `npm stage publish` workflow 代替。
 5. 引导版发布后，立即配置 trusted publisher，再进入正常流水线。
 
 官方限制见 [npm staged publishing](https://docs.npmjs.com/staged-publishing/) 和 [`npm trust` 文档](https://docs.npmjs.com/cli/v11/commands/npm-trust/)。首次交互式版本不会获得 GitHub Actions OIDC 产生的 npm provenance，发布记录必须如实注明这项一次性差异。
@@ -154,7 +153,7 @@ Node.js 官方当前将 22 和 24 列为 LTS；支持状态变化时，应通过
 2. TypeScript 严格检查。
 3. 全部单元与端到端测试。
 4. Git staged、worktree、base scope smoke。
-5. dry-run、单 finding apply、单文件批量 apply、receipt verify。
+5. macOS/Linux 执行 dry-run、单 finding apply、单文件批量 apply、receipt verify；Windows 执行 dry-run、preview、SARIF，并验证 apply/undo/recover/history prune 明确拒绝写入。
 6. CRLF、Unicode、空格路径、符号链接/非普通文件和并发修改拒绝测试。
 
 PR 中涉及 `package.json` 或 lockfile 的更改还必须经过 dependency review。公共仓库可使用 GitHub dependency review 来阻止引入已知漏洞的依赖，参见 [GitHub Dependency Review](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/manage-your-dependency-security/configure-dependency-review-action)。
@@ -166,7 +165,7 @@ Release 不能让六个矩阵项各自构建不同 tarball。推荐流程是：
 1. 一个受控 Linux release-build job 从精确 tag 构建唯一 tarball。
 2. 计算 tarball SHA-256，并生成运行时依赖 SBOM。
 3. 将同一 tarball交给六个 install-smoke job。
-4. 每个 job 在全新临时目录安装 tarball，验证 `repofit --version`、`--help`、只读扫描、写入、拒绝路径和 receipt。
+4. 每个 job 在全新临时目录安装 tarball，验证 `repofit --version`、`--help` 和只读扫描；macOS/Linux 验证写入、拒绝路径和 receipt，Windows 验证所有自动写入入口均明确拒绝。
 5. 全部通过后，原始 tarball才可进入 npm staging 和 GitHub draft Release。
 
 `npm sbom` 官方支持 SPDX 与 CycloneDX；v1 使用 SPDX JSON，并排除开发依赖，参见 [`npm sbom`](https://docs.npmjs.com/cli/commands/npm-sbom/)。
@@ -183,7 +182,7 @@ Release 不能让六个矩阵项各自构建不同 tarball。推荐流程是：
 8. 人工下载 npm staged tarball，与构建产物 SHA-256 比较，并复核包清单。
 9. 用户使用 2FA 批准 staged package。
 10. 立即发布已经准备完整的 GitHub draft；不得重新构建资产。
-11. 执行发布后验证；全部通过后再更新 Homebrew tap。
+11. 执行发布后验证；如项目已经达到第 8 节的延后门槛并启用了 Homebrew tap，再单独更新 tap。
 
 如果 npm 批准成功而 GitHub 发布暂时失败，应继续使用已经存在的 draft 重试发布，不得重新构建或替换 tarball。
 
@@ -370,7 +369,7 @@ Homebrew 是滚动发布管理器，不保证为已经安装坏版本的用户�
 - [ ] 全新环境执行精确版本 `npx` 命令成功。
 - [ ] 全局安装后 `repofit --version` 正确。
 - [ ] 真实小型 Git fixture 完成 check、preview、apply 和 verify。
-- [ ] GitHub tarball、npm tarball、checksum 和 Homebrew formula SHA 一致。
+- [ ] GitHub tarball、npm tarball和 checksum 指向同一制品；仅当 Homebrew 渠道已经启用时，formula SHA 也必须一致。
 - [ ] Release notes、安装文档、安全支持版本和已知限制已更新。
 
 ## 13. 必须由用户完成的账号与设置步骤

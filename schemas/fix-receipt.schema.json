@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TAOMA-06/repofit-comments/schemas/fix-receipt.schema.json",
+  "title": "RepoFit Comments schema 3 fix receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "receiptId", "repositoryId", "status", "findingIds", "relativePath", "analysisScope", "writeTarget", "preparedAt", "fileMode", "beforeFileHash", "afterFileHash", "nonCommentTokenHash", "syntaxTreeHash", "protectedCommentHash"],
+  "properties": {
+    "schemaVersion": { "const": "3.0" },
+    "receiptId": { "type": "string", "format": "uuid" },
+    "repositoryId": { "type": "string", "format": "uuid" },
+    "status": { "enum": ["prepared", "applied", "undo-prepared", "undone", "aborted"] },
+    "findingIds": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "relativePath": { "type": "string", "minLength": 1 },
+    "analysisScope": { "const": { "kind": "worktree" } },
+    "writeTarget": { "const": "worktree" },
+    "preparedAt": { "type": "string", "format": "date-time" },
+    "appliedAt": { "type": "string", "format": "date-time" },
+    "undoPreparedAt": { "type": "string", "format": "date-time" },
+    "undoOperationId": { "type": "string", "format": "uuid" },
+    "undoneAt": { "type": "string", "format": "date-time" },
+    "abortedAt": { "type": "string", "format": "date-time" },
+    "abortReason": { "type": "string", "minLength": 1 },
+    "recoveredAt": { "type": "string", "format": "date-time" },
+    "recoveryAction": { "enum": ["mark-applied", "mark-aborted", "mark-undone"] },
+    "fileMode": { "type": "integer", "minimum": 0, "maximum": 511 },
+    "beforeFileHash": { "$ref": "#/$defs/hash" },
+    "afterFileHash": { "$ref": "#/$defs/hash" },
+    "nonCommentTokenHash": { "$ref": "#/$defs/hash" },
+    "syntaxTreeHash": { "$ref": "#/$defs/hash" },
+    "protectedCommentHash": { "$ref": "#/$defs/hash" }
+  },
+  "dependentRequired": {
+    "recoveredAt": ["recoveryAction"],
+    "recoveryAction": ["recoveredAt"]
+  },
+  "oneOf": [
+    {
+      "properties": { "status": { "const": "prepared" } },
+      "not": { "anyOf": [
+        { "required": ["appliedAt"] }, { "required": ["undoPreparedAt"] },
+        { "required": ["undoOperationId"] }, { "required": ["undoneAt"] },
+        { "required": ["abortedAt"] }, { "required": ["abortReason"] },
+        { "required": ["recoveredAt"] }, { "required": ["recoveryAction"] }
+      ] }
+    },
+    {
+      "properties": { "status": { "const": "applied" } },
+      "required": ["appliedAt"],
+      "not": { "anyOf": [
+        { "required": ["undoPreparedAt"] }, { "required": ["undoOperationId"] },
+        { "required": ["undoneAt"] }, { "required": ["abortedAt"] },
+        { "required": ["abortReason"] }
+      ] }
+    },
+    {
+      "properties": { "status": { "const": "undo-prepared" } },
+      "required": ["appliedAt", "undoPreparedAt", "undoOperationId"],
+      "not": { "anyOf": [
+        { "required": ["undoneAt"] }, { "required": ["abortedAt"] },
+        { "required": ["abortReason"] }, { "required": ["recoveredAt"] },
+        { "required": ["recoveryAction"] }
+      ] }
+    },
+    {
+      "properties": { "status": { "const": "undone" } },
+      "required": ["appliedAt", "undoPreparedAt", "undoOperationId", "undoneAt"],
+      "not": { "anyOf": [
+        { "required": ["abortedAt"] }, { "required": ["abortReason"] }
+      ] }
+    },
+    {
+      "properties": { "status": { "const": "aborted" } },
+      "required": ["abortedAt", "abortReason"],
+      "not": { "anyOf": [
+        { "required": ["appliedAt"] }, { "required": ["undoPreparedAt"] },
+        { "required": ["undoOperationId"] }, { "required": ["undoneAt"] }
+      ] }
+    }
+  ],
+  "allOf": [
+    { "if": { "required": ["recoveryAction"], "properties": { "recoveryAction": { "const": "mark-applied" } } }, "then": { "properties": { "status": { "const": "applied" } } } },
+    { "if": { "required": ["recoveryAction"], "properties": { "recoveryAction": { "const": "mark-aborted" } } }, "then": { "properties": { "status": { "const": "aborted" } } } },
+    { "if": { "required": ["recoveryAction"], "properties": { "recoveryAction": { "const": "mark-undone" } } }, "then": { "properties": { "status": { "const": "undone" } } } }
+  ],
+  "$defs": {
+    "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

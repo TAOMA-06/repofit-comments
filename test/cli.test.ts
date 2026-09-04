@@ -13,12 +13,13 @@ import { applyFinding } from "../src/patch.js";
 
 const cliPath =
   process.env.REPOFIT_CLI_PATH ?? fileURLToPath(new URL("../src/cli.js", import.meta.url));
+const writeTest = process.platform === "win32" ? test.skip : test;
 
 function git(root: string, args: string[]): string {
   return execFileSync("git", args, { cwd: root, encoding: "utf8" });
 }
 
-test("CLI checks, previews, applies, and verifies one worktree comment fix", () => {
+writeTest("CLI checks, previews, applies, and verifies one worktree comment fix", () => {
   const root = mkdtempSync(join(tmpdir(), "repofit-comments-test-"));
   try {
     git(root, ["init", "-q"]);
@@ -88,7 +89,8 @@ test("CLI checks, previews, applies, and verifies one worktree comment fix", () 
       { cwd: root, encoding: "utf8" },
     );
     assert.equal(dryRun.status, 0, dryRun.stderr);
-    assert.match(dryRun.stdout, /remove comment/);
+    assert.match(dryRun.stdout, /^--- a\/counter\.ts/m);
+    assert.match(dryRun.stdout, /^-  \/\/ Main Logic/m);
     assert.equal(readFileSync(path, "utf8"), changed);
 
     const applied = spawnSync(
@@ -130,7 +132,7 @@ test("CLI checks, previews, applies, and verifies one worktree comment fix", () 
   }
 });
 
-test("CLI applies a deterministic step-prefix rewrite without changing code", () => {
+writeTest("CLI applies a deterministic step-prefix rewrite without changing code", () => {
   const root = mkdtempSync(join(tmpdir(), "repofit-comments-rewrite-test-"));
   try {
     git(root, ["init", "-q"]);
@@ -180,7 +182,7 @@ test("CLI applies a deterministic step-prefix rewrite without changing code", ()
   }
 });
 
-test("CLI applies every safe finding in one file as one verified transaction", () => {
+writeTest("CLI applies every safe finding in one file as one verified transaction", () => {
   const root = mkdtempSync(join(tmpdir(), "repofit-comments-batch-test-"));
   try {
     git(root, ["init", "-q"]);
@@ -296,7 +298,7 @@ test("CLI supports worktree and base scopes", () => {
   }
 });
 
-test("applyFinding refuses to overwrite a concurrent working-tree edit", () => {
+writeTest("applyFinding refuses to overwrite a concurrent working-tree edit", () => {
   const root = mkdtempSync(join(tmpdir(), "repofit-comments-conflict-test-"));
   try {
     git(root, ["init", "-q"]);
@@ -332,7 +334,7 @@ test("applyFinding refuses to overwrite a concurrent working-tree edit", () => {
   }
 });
 
-test("CLI refuses to apply suggestion-only findings", () => {
+writeTest("CLI refuses to apply suggestion-only findings", () => {
   const root = mkdtempSync(join(tmpdir(), "repofit-comments-suggestion-test-"));
   try {
     git(root, ["init", "-q"]);
@@ -441,7 +443,7 @@ test("CLI rejects irrelevant flags and positional arguments", () => {
     { encoding: "utf8" },
   );
   assert.equal(irrelevantFlag.status, 2);
-  assert.match(irrelevantFlag.stderr, /only valid with comments fix/);
+  assert.match(irrelevantFlag.stderr, /only valid with fix or history prune/);
 
   const extraPosition = spawnSync(
     process.execPath,
