@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -10,7 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 const tarballArgument = process.argv[2];
 if (!tarballArgument) throw new Error("Usage: installed-smoke.mjs <package.tgz>");
@@ -27,8 +28,18 @@ const tarball = statSync(resolvedInput).isDirectory()
     })()
   : resolvedInput;
 if (!tarball) throw new Error("Unable to resolve the package tarball.");
-const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 const temporaryRoot = mkdtempSync(join(tmpdir(), "repofit-installed-smoke-"));
+
+function npmInvocation() {
+  const candidates = [
+    process.env.npm_execpath,
+    join(dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"),
+  ];
+  const cli = candidates.find((candidate) => candidate && existsSync(candidate));
+  return cli
+    ? { command: process.execPath, prefix: [cli] }
+    : { command: process.platform === "win32" ? "npm.cmd" : "npm", prefix: [] };
+}
 
 function run(command, args, cwd, environment = {}) {
   return execFileSync(command, args, {
@@ -60,9 +71,11 @@ try {
   mkdirSync(installRoot);
   const localRuntime = process.env.REPOFIT_SMOKE_LOCAL_TYPESCRIPT;
   const installSources = [tarball, ...(localRuntime ? [localRuntime] : [])];
+  const npm = npmInvocation();
   run(
-    npm,
+    npm.command,
     [
+      ...npm.prefix,
       "install",
       "--ignore-scripts",
       "--no-audit",

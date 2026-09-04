@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
   cpSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -9,13 +10,23 @@ import {
   symlinkSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 const temporaryRoot = mkdtempSync(join(tmpdir(), "repofit-package-smoke-"));
 const buildRoot = join(temporaryRoot, "clean-build");
+
+function npmInvocation() {
+  const candidates = [
+    process.env.npm_execpath,
+    join(dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"),
+  ];
+  const cli = candidates.find((candidate) => candidate && existsSync(candidate));
+  return cli
+    ? { command: process.execPath, prefix: [cli] }
+    : { command: process.platform === "win32" ? "npm.cmd" : "npm", prefix: [] };
+}
 
 function run(command, args, cwd, environment = {}) {
   return execFileSync(command, args, {
@@ -64,10 +75,17 @@ try {
     process.platform === "win32" ? "junction" : "dir",
   );
 
+  const npm = npmInvocation();
   const packed = JSON.parse(
     run(
-      npm,
-      ["pack", "--json", "--pack-destination", temporaryRoot],
+      npm.command,
+      [
+        ...npm.prefix,
+        "pack",
+        "--json",
+        "--pack-destination",
+        temporaryRoot,
+      ],
       buildRoot,
     ),
   );
