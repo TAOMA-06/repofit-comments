@@ -6,6 +6,10 @@ Version: `1.1.0-alpha.1`
 
 Branch: `product/multilang-batches`
 
+Implementation commit: `98ae321`
+
+Verified source snapshot: `be534e17afe08e104e27e6dda1b1af2d992058c3`
+
 Status: local implementation evidence. The branch has not been pushed and the multi-language matrix has not run remotely.
 
 ## Implemented batches
@@ -36,6 +40,8 @@ Status: local implementation evidence. The branch has not been pushed and the mu
 - The isolated `1.1.0-alpha.1` package passed exact local dependency installation and fresh npm-registry dependency resolution. Its installed CLI loaded all grammars, listed 19 adapters, and exercised TypeScript and Python findings.
 - Online production-dependency audit reported 0 known vulnerabilities.
 - Local benchmarks: 10,000 changed lines in 324.7 ms; 100 changed files in 355.2 ms; cold `languages --format json` startup in 0.37 seconds.
+- The clean source snapshot produced `repofit-comments-1.1.0-alpha.1.tgz` with SHA-256 `0a4d2473b9233111ed845d3c0964360b80e471c6239a609f9a1c0e00e465fd56` and npm integrity `sha512-RKYl+6YN0CfFoP4Wtfp/wpkHNLD/9kwnvbSTqZoA1V+GD3Oh52drgZQUiF2ANwuQl4N6QgM9KQMs+bLQ9mtNfQ==`.
+- The release verifier accepted the manifest, exact allowlist, checksums, SPDX application metadata, and all three runtime dependencies; the exact tarball then passed installed smoke.
 
 ## Evidence not yet obtained
 
