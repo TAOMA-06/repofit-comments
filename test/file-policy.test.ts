@@ -15,14 +15,19 @@ function git(root: string, args: string[]): string {
   return execFileSync("git", args, { cwd: root, encoding: "utf8" });
 }
 
-test("source path policy supports the TypeScript family only", () => {
-  for (const path of ["src/a.ts", "src/a.tsx", "src/a.mts", "src/a.cts"]) {
+test("source path policy supports all three language batches", () => {
+  for (const path of [
+    "src/a.ts", "src/a.tsx", "src/a.mts", "src/a.cts",
+    "src/a.js", "src/a.jsx", "src/a.py", "src/a.go", "src/a.rs", "src/a.swift",
+    "src/A.java", "src/a.kt", "src/A.cs", "src/a.c", "src/a.cpp", "src/a.php",
+    "src/a.rb", "src/a.dart", "src/a.lua", "src/A.vue", "src/A.svelte", "src/a.sh",
+    "src/a.sql",
+  ]) {
     assert.equal(isSupportedSourcePath(path), true, path);
   }
 
   for (const path of [
-    "src/a.js",
-    "src/a.jsx",
+    "src/a.txt",
     "src/a.d.ts",
     "src/a.d.mts",
     "src/a.d.cts",

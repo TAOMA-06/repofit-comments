@@ -9,6 +9,7 @@ import type {
 } from "./model.js";
 import {
   commentLanguage,
+  lineCommentPrefix,
   normalizeComment,
   protectedReason,
   RATIONALE_PROTECTION_REASON,
@@ -150,7 +151,7 @@ function shortenedMetaComment(comment: SourceComment): string | undefined {
   if (!shortened || shortened === comment.content) {
     return undefined;
   }
-  return `// ${shortened}`;
+  return `${lineCommentPrefix(comment.raw)} ${shortened}`;
 }
 
 export function analyzeComments(
@@ -213,7 +214,7 @@ export function analyzeComments(
 
   for (const comment of comments) {
     const protection = protectionByComment.get(comment);
-    const stepReplacement = stepNarrationReplacement(comment.content);
+    const stepReplacement = stepNarrationReplacement(comment);
     const canStripStepPrefix =
       stepReplacement !== undefined &&
       (protection === undefined || protection === RATIONALE_PROTECTION_REASON);

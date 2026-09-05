@@ -1,67 +1,373 @@
-import ts from "typescript";
+import { createRequire } from "node:module";
+
+import {
+  Language,
+  Parser,
+  type Node as SyntaxNode,
+} from "web-tree-sitter";
 
 import { sha256 } from "./hash.js";
+import {
+  LANGUAGE_DEFINITIONS,
+  languageForPath,
+  type LanguageDefinition,
+} from "./language-registry.js";
 import type { LineRange, SourceComment } from "./model.js";
+import { scanSql } from "./sql-analyzer.js";
+import {
+  extractTypeScriptComments,
+  typeScriptNonCommentTokenHash,
+  typeScriptParseErrorCount,
+  typeScriptSyntaxTreeHash,
+} from "./typescript-analyzer.js";
 
-function scriptKindFor(relativePath: string): ts.ScriptKind {
-  return relativePath.toLowerCase().endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+interface CommentRange {
+  readonly start: number;
+  readonly end: number;
 }
 
-function languageVariantFor(relativePath: string): ts.LanguageVariant {
-  return relativePath.toLowerCase().endsWith(".tsx")
-    ? ts.LanguageVariant.JSX
-    : ts.LanguageVariant.Standard;
+interface ScriptRegion {
+  readonly contentStart: number;
+  readonly contentEnd: number;
+  readonly languagePath: string;
 }
 
-function lineBounds(text: string, position: number): { start: number; end: number; endWithBreak: number } {
+const COMMENT_NODE_TYPES = new Set([
+  "comment",
+  "line_comment",
+  "block_comment",
+  "doc_comment",
+  "documentation_comment",
+  "multiline_comment",
+]);
+
+const require = createRequire(import.meta.url);
+const languageCache = new Map<string, Language>();
+
+await Parser.init();
+for (const definition of LANGUAGE_DEFINITIONS) {
+  if (definition.parser !== "tree-sitter" || !definition.grammarFile) continue;
+  if (languageCache.has(definition.grammarFile)) continue;
+  const grammarPath = require.resolve(
+    `tree-sitter-wasms/out/${definition.grammarFile}`,
+  );
+  languageCache.set(definition.grammarFile, await Language.load(grammarPath));
+}
+
+function definitionFor(relativePath: string, text: string): LanguageDefinition {
+  const definition = languageForPath(relativePath, text);
+  if (!definition) throw new Error(`Unsupported source language: ${relativePath}`);
+  return definition;
+}
+
+function withTree<T>(
+  definition: LanguageDefinition,
+  text: string,
+  inspect: (root: SyntaxNode) => T,
+): T {
+  const grammar = definition.grammarFile
+    ? languageCache.get(definition.grammarFile)
+    : undefined;
+  if (!grammar) throw new Error(`Parser grammar is unavailable for ${definition.label}.`);
+  const parser = new Parser();
+  parser.setLanguage(grammar);
+  const tree = parser.parse(text);
+  if (!tree) {
+    parser.delete();
+    throw new Error(`${definition.label} parser returned no syntax tree.`);
+  }
+  try {
+    return inspect(tree.rootNode);
+  } finally {
+    tree.delete();
+    parser.delete();
+  }
+}
+
+function visit(node: SyntaxNode, callback: (node: SyntaxNode) => boolean | void): void {
+  if (callback(node) === false) return;
+  for (const child of node.children) {
+    if (child) visit(child, callback);
+  }
+}
+
+function treeSitterCommentRanges(
+  definition: LanguageDefinition,
+  text: string,
+): CommentRange[] {
+  return withTree(definition, text, (root) => {
+    const ranges: CommentRange[] = [];
+    visit(root, (node) => {
+      if (!COMMENT_NODE_TYPES.has(node.type)) return;
+      ranges.push({ start: node.startIndex, end: node.endIndex });
+      return false;
+    });
+    return ranges;
+  });
+}
+
+function lineBounds(text: string, position: number): {
+  start: number;
+  end: number;
+  endWithBreak: number;
+} {
   const previousBreak = text.lastIndexOf("\n", Math.max(0, position - 1));
   const start = previousBreak < 0 ? 0 : previousBreak + 1;
   const nextBreak = text.indexOf("\n", position);
   const end = nextBreak < 0 ? text.length : nextBreak;
-  const endWithBreak = nextBreak < 0 ? text.length : nextBreak + 1;
-  return { start, end, endWithBreak };
+  return { start, end, endWithBreak: nextBreak < 0 ? text.length : nextBreak + 1 };
+}
+
+function lineStartsFor(text: string): number[] {
+  const starts = [0];
+  for (let index = 0; index < text.length; index += 1) {
+    if (text.charCodeAt(index) === 10) starts.push(index + 1);
+  }
+  return starts;
+}
+
+function lineNumberAt(lineStarts: readonly number[], position: number): number {
+  let low = 0;
+  let high = lineStarts.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if ((lineStarts[middle] ?? 0) <= position) low = middle + 1;
+    else high = middle;
+  }
+  return Math.max(1, low);
+}
+
+function commentKind(raw: string): SourceComment["kind"] {
+  if (/^(?:\/\/[/!]|\/\*[*!])/u.test(raw)) return "doc";
+  if (raw.includes("\n") || /^(?:\/\*|<!--|--\[(?:=*)\[|=begin\b)/u.test(raw)) {
+    return "block";
+  }
+  return "line";
+}
+
+function commentContent(raw: string): string {
+  if (raw.startsWith("<!--")) return raw.slice(4, raw.endsWith("-->") ? -3 : undefined).trim();
+  if (raw.startsWith("--[[")) return raw.slice(4, raw.endsWith("]]" ) ? -2 : undefined).trim();
+  if (raw.startsWith("/*")) {
+    return raw.slice(raw.startsWith("/**") ? 3 : 2, raw.endsWith("*/") ? -2 : undefined).trim();
+  }
+  return raw.replace(/^(?:\/\/[/!]?|#|--)/u, "").trim();
 }
 
 function overlapsRanges(startLine: number, endLine: number, ranges: LineRange[]): boolean {
   return ranges.some((range) => startLine <= range.end && endLine >= range.start);
 }
 
-export function filterCommentsByRanges(
-  comments: SourceComment[],
-  ranges: LineRange[],
-): SourceComment[] {
-  return comments.filter((comment) =>
-    overlapsRanges(comment.line, comment.endLine, ranges),
-  );
+function commentProjection(text: string, ranges: readonly CommentRange[]): string {
+  const characters = text.split("");
+  for (const range of ranges) {
+    for (let index = range.start; index < range.end; index += 1) {
+      if (characters[index] !== "\n" && characters[index] !== "\r") characters[index] = " ";
+    }
+  }
+  return characters.join("");
 }
 
 function nextCodeLine(
   text: string,
-  position: number,
-  relativePath: string,
-  sourceFile: ts.SourceFile,
-): {
-  text: string;
-  line?: number;
-} {
-  const scanner = ts.createScanner(
-    ts.ScriptTarget.Latest,
-    true,
-    languageVariantFor(relativePath),
-    text,
-  );
-  scanner.setTextPos(position);
-  const token = scanner.scan();
-  if (token === ts.SyntaxKind.EndOfFileToken) {
-    return { text: "" };
+  projection: string,
+  end: number,
+  lineStarts: readonly number[],
+): { text: string; line?: number } {
+  let cursor = lineBounds(text, Math.max(0, end - 1)).endWithBreak;
+  while (cursor < text.length) {
+    const bounds = lineBounds(text, cursor);
+    if (projection.slice(bounds.start, bounds.end).trim()) {
+      return {
+        text: text.slice(bounds.start, bounds.end).trim(),
+        line: lineNumberAt(lineStarts, bounds.start),
+      };
+    }
+    cursor = bounds.endWithBreak;
   }
+  return { text: "" };
+}
 
-  const tokenPosition = scanner.getTokenPos();
-  const bounds = lineBounds(text, tokenPosition);
+function sourceCommentsFromRanges(
+  relativePath: string,
+  text: string,
+  inputRanges: readonly CommentRange[],
+): SourceComment[] {
+  const ranges = [...new Map(
+    inputRanges.map((range) => {
+      const end =
+        range.end > range.start &&
+        text.charCodeAt(range.end - 1) === 13 &&
+        text.charCodeAt(range.end) === 10
+          ? range.end - 1
+          : range.end;
+      const normalized = { start: range.start, end };
+      return [`${normalized.start}:${normalized.end}`, normalized] as const;
+    }),
+  ).values()].sort((left, right) => left.start - right.start);
+  const projection = commentProjection(text, ranges);
+  const firstCodePosition = projection.search(/\S/u);
+  const lineStarts = lineStartsFor(text);
+
+  return ranges.map((range) => {
+    const raw = text.slice(range.start, range.end);
+    const startBounds = lineBounds(text, range.start);
+    const endBounds = lineBounds(text, Math.max(range.start, range.end - 1));
+    const prefix = text.slice(startBounds.start, range.start);
+    const suffix = text.slice(range.end, endBounds.end);
+    const standalone = !prefix.trim() && !suffix.trim();
+    const following = nextCodeLine(text, projection, range.end, lineStarts);
+    const nextCodeLineNumber = following.line;
+    return {
+      relativePath,
+      kind: commentKind(raw),
+      raw,
+      content: commentContent(raw),
+      start: range.start,
+      end: range.end,
+      line: lineNumberAt(lineStarts, range.start),
+      endLine: lineNumberAt(lineStarts, Math.max(range.start, range.end - 1)),
+      standalone,
+      leadingFileComment: firstCodePosition < 0 || range.start < firstCodePosition,
+      removeStart: standalone ? startBounds.start : range.start,
+      removeEnd: standalone ? endBounds.endWithBreak : range.end,
+      sourceLine: text.slice(startBounds.start, endBounds.end).trim(),
+      nextCodeLine: following.text,
+      ...(nextCodeLineNumber === undefined ? {} : { nextCodeLineNumber }),
+    };
+  });
+}
+
+function componentScriptRegions(relativePath: string, text: string): ScriptRegion[] {
+  const regions: ScriptRegion[] = [];
+  const pattern = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/giu;
+  for (const match of text.matchAll(pattern)) {
+    if (match.index === undefined) continue;
+    const full = match[0];
+    const attributes = match[1] ?? "";
+    const openEnd = full.indexOf(">");
+    const closeStart = full.toLowerCase().lastIndexOf("</script");
+    if (openEnd < 0 || closeStart < 0) continue;
+    const contentStart = match.index + openEnd + 1;
+    const contentEnd = match.index + closeStart;
+    regions.push({
+      contentStart,
+      contentEnd,
+      languagePath: /\blang\s*=\s*["']ts["']/iu.test(attributes)
+        ? `${relativePath}.ts`
+        : `${relativePath}.js`,
+    });
+  }
+  return regions;
+}
+
+function shiftComment(
+  comment: SourceComment,
+  relativePath: string,
+  text: string,
+  offset: number,
+  lineStarts: readonly number[],
+): SourceComment {
+  const { nextCodeLineNumber: localNextCodeLineNumber, ...base } = comment;
+  const start = comment.start + offset;
+  const end = comment.end + offset;
+  const startBounds = lineBounds(text, start);
+  const endBounds = lineBounds(text, Math.max(start, end - 1));
   return {
-    text: text.slice(bounds.start, bounds.end).trim(),
-    line: sourceFile.getLineAndCharacterOfPosition(tokenPosition).line + 1,
+    ...base,
+    relativePath,
+    start,
+    end,
+    line: lineNumberAt(lineStarts, start),
+    endLine: lineNumberAt(lineStarts, Math.max(start, end - 1)),
+    leadingFileComment: false,
+    removeStart: comment.removeStart + offset,
+    removeEnd: comment.removeEnd + offset,
+    sourceLine: text.slice(startBounds.start, endBounds.end).trim(),
+    ...(localNextCodeLineNumber === undefined
+      ? {}
+      : { nextCodeLineNumber: lineNumberAt(lineStarts, offset) + localNextCodeLineNumber - 1 }),
   };
+}
+
+function componentComments(relativePath: string, text: string): SourceComment[] {
+  const comments: SourceComment[] = [];
+  const lineStarts = lineStartsFor(text);
+  for (const match of text.matchAll(/<!--[\s\S]*?-->/gu)) {
+    if (match.index !== undefined) {
+      comments.push(...sourceCommentsFromRanges(relativePath, text, [{
+        start: match.index,
+        end: match.index + match[0].length,
+      }]));
+    }
+  }
+  for (const region of componentScriptRegions(relativePath, text)) {
+    const content = text.slice(region.contentStart, region.contentEnd);
+    comments.push(
+      ...extractTypeScriptComments(region.languagePath, content).map((comment) =>
+        shiftComment(comment, relativePath, text, region.contentStart, lineStarts),
+      ),
+    );
+  }
+  return comments.sort((left, right) => left.start - right.start);
+}
+
+function treeErrorCount(definition: LanguageDefinition, text: string): number {
+  return withTree(definition, text, (root) => {
+    let errors = 0;
+    visit(root, (node) => {
+      if (node.type === "ERROR" || node.isMissing) errors += 1;
+    });
+    return errors;
+  });
+}
+
+function treeTokenHash(definition: LanguageDefinition, text: string): string {
+  return withTree(definition, text, (root) => {
+    const tokens: string[] = [];
+    visit(root, (node) => {
+      if (COMMENT_NODE_TYPES.has(node.type)) return false;
+      const children = node.children.filter((child): child is SyntaxNode => child !== null);
+      if (children.length === 0) tokens.push(`${node.type}:${text.slice(node.startIndex, node.endIndex)}`);
+    });
+    return sha256(tokens.join("\u0000"));
+  });
+}
+
+function treeSyntaxHash(definition: LanguageDefinition, text: string): string {
+  return withTree(definition, text, (root) => {
+    const kinds: string[] = [];
+    visit(root, (node) => {
+      if (COMMENT_NODE_TYPES.has(node.type)) return false;
+      kinds.push(node.type);
+    });
+    return sha256(kinds.join("\u0000"));
+  });
+}
+
+function componentHash(relativePath: string, text: string, syntaxOnly: boolean): string {
+  const regions = componentScriptRegions(relativePath, text);
+  const parts: string[] = [];
+  let cursor = 0;
+  for (const region of regions) {
+    parts.push(text.slice(cursor, region.contentStart));
+    const content = text.slice(region.contentStart, region.contentEnd);
+    parts.push(
+      syntaxOnly
+        ? typeScriptSyntaxTreeHash(region.languagePath, content)
+        : typeScriptNonCommentTokenHash(region.languagePath, content),
+    );
+    cursor = region.contentEnd;
+  }
+  parts.push(text.slice(cursor));
+  return sha256(parts.join("\u0000"));
+}
+
+export function filterCommentsByRanges(
+  comments: SourceComment[],
+  ranges: LineRange[],
+): SourceComment[] {
+  return comments.filter((comment) => overlapsRanges(comment.line, comment.endLine, ranges));
 }
 
 export function extractComments(
@@ -69,156 +375,61 @@ export function extractComments(
   text: string,
   changedRanges?: LineRange[],
 ): SourceComment[] {
-  const sourceFile = ts.createSourceFile(
-    relativePath,
-    text,
-    ts.ScriptTarget.Latest,
-    true,
-    scriptKindFor(relativePath),
-  );
-  const codeScanner = ts.createScanner(
-    ts.ScriptTarget.Latest,
-    true,
-    languageVariantFor(relativePath),
-    text,
-  );
-  const firstCodeToken = codeScanner.scan();
-  const firstCodePosition =
-    firstCodeToken === ts.SyntaxKind.EndOfFileToken ? text.length : codeScanner.getTokenPos();
-  const comments: SourceComment[] = [];
-  const ranges = new Map<string, ts.CommentRange>();
-  const addRanges = (items: readonly ts.CommentRange[] | undefined): void => {
-    for (const item of items ?? []) {
-      ranges.set(`${item.pos}:${item.end}`, item);
-    }
-  };
-  const collectRanges = (node: ts.Node): void => {
-    addRanges(ts.getLeadingCommentRanges(text, node.getFullStart()));
-    addRanges(ts.getTrailingCommentRanges(text, node.end));
-    if (ts.isJsxExpression(node) && node.expression === undefined) {
-      const jsxText = text.slice(node.pos, node.end);
-      const commentStart = jsxText.indexOf("/*");
-      const commentEnd = jsxText.lastIndexOf("*/");
-      if (commentStart >= 0 && commentEnd >= commentStart) {
-        const pos = node.pos + commentStart;
-        const end = node.pos + commentEnd + 2;
-        ranges.set(`${pos}:${end}`, {
-          pos,
-          end,
-          kind: ts.SyntaxKind.MultiLineCommentTrivia,
-        });
-      }
-    }
-    ts.forEachChild(node, collectRanges);
-  };
-  collectRanges(sourceFile);
-
-  for (const range of [...ranges.values()].sort((left, right) => left.pos - right.pos)) {
-    const start = range.pos;
-    const end = range.end;
-    const raw = text.slice(start, end);
-    const startLocation = sourceFile.getLineAndCharacterOfPosition(start);
-    const endLocation = sourceFile.getLineAndCharacterOfPosition(Math.max(start, end - 1));
-    const line = startLocation.line + 1;
-    const endLine = endLocation.line + 1;
-
-    if (changedRanges && !overlapsRanges(line, endLine, changedRanges)) {
-      continue;
-    }
-
-    const startBounds = lineBounds(text, start);
-    const endBounds = lineBounds(text, Math.max(start, end - 1));
-    const prefix = text.slice(startBounds.start, start);
-    const suffix = text.slice(end, endBounds.end);
-    const standalone = prefix.trim().length === 0 && suffix.trim().length === 0;
-    const isLine = range.kind === ts.SyntaxKind.SingleLineCommentTrivia;
-    const isDoc = raw.startsWith("///") || raw.startsWith("/**");
-    const content = isLine
-      ? raw.replace(/^\/{2,3}/, "").trim()
-      : raw.replace(/^\/\*+/, "").replace(/\*+\/$/, "").trim();
-    const following = nextCodeLine(text, end, relativePath, sourceFile);
-
-    comments.push({
+  const definition = definitionFor(relativePath, text);
+  let comments: SourceComment[];
+  if (definition.parser === "typescript") {
+    comments = extractTypeScriptComments(relativePath, text);
+  } else if (definition.parser === "tree-sitter") {
+    comments = sourceCommentsFromRanges(
       relativePath,
-      kind: isDoc ? "doc" : isLine ? "line" : "block",
-      raw,
-      content,
-      start,
-      end,
-      line,
-      endLine,
-      standalone,
-      leadingFileComment: start < firstCodePosition,
-      removeStart: standalone ? startBounds.start : start,
-      removeEnd: standalone ? endBounds.endWithBreak : end,
-      sourceLine: text.slice(startBounds.start, endBounds.end).trim(),
-      nextCodeLine: following.text,
-      ...(following.line === undefined ? {} : { nextCodeLineNumber: following.line }),
-    });
+      text,
+      treeSitterCommentRanges(definition, text),
+    );
+  } else if (definition.parser === "component") {
+    comments = componentComments(relativePath, text);
+  } else {
+    comments = sourceCommentsFromRanges(relativePath, text, scanSql(text).comments);
   }
-
-  return comments;
+  return changedRanges ? filterCommentsByRanges(comments, changedRanges) : comments;
 }
 
 export function parseErrorCount(relativePath: string, text: string): number {
-  const sourceFile = ts.createSourceFile(
-    relativePath,
-    text,
-    ts.ScriptTarget.Latest,
-    true,
-    scriptKindFor(relativePath),
-  ) as ts.SourceFile & { parseDiagnostics?: readonly ts.Diagnostic[] };
-  return sourceFile.parseDiagnostics?.length ?? 0;
+  const definition = definitionFor(relativePath, text);
+  if (definition.parser === "typescript") return typeScriptParseErrorCount(relativePath, text);
+  if (definition.parser === "tree-sitter") return treeErrorCount(definition, text);
+  if (definition.parser === "sql") return scanSql(text).errorCount;
+  return componentScriptRegions(relativePath, text).reduce(
+    (total, region) =>
+      total + typeScriptParseErrorCount(
+        region.languagePath,
+        text.slice(region.contentStart, region.contentEnd),
+      ),
+    0,
+  );
 }
 
 export function nonCommentTokenHash(relativePath: string, text: string): string {
-  const sourceFile = ts.createSourceFile(
-    relativePath,
-    text,
-    ts.ScriptTarget.Latest,
-    true,
-    scriptKindFor(relativePath),
-  );
-  const tokens: string[] = [];
-
-  const visit = (node: ts.Node): void => {
-    const children = node.getChildren(sourceFile);
-    if (children.length === 0) {
-      if (node.kind <= ts.SyntaxKind.LastToken && node.kind !== ts.SyntaxKind.EndOfFileToken) {
-        tokens.push(`${node.kind}:${text.slice(node.getStart(sourceFile, false), node.end)}`);
-      }
-      return;
-    }
-    for (const child of children) {
-      visit(child);
-    }
-  };
-  visit(sourceFile);
-
-  return sha256(tokens.join("\u0000"));
+  const definition = definitionFor(relativePath, text);
+  if (definition.parser === "typescript") return typeScriptNonCommentTokenHash(relativePath, text);
+  if (definition.parser === "tree-sitter") return treeTokenHash(definition, text);
+  if (definition.parser === "component") return componentHash(relativePath, text, false);
+  const scan = scanSql(text);
+  return sha256(commentProjection(text, scan.comments).replace(/\s+/gu, " ").trim());
 }
 
 export function syntaxTreeHash(relativePath: string, text: string): string {
-  const sourceFile = ts.createSourceFile(
-    relativePath,
-    text,
-    ts.ScriptTarget.Latest,
-    true,
-    scriptKindFor(relativePath),
-  );
-  const kinds: number[] = [];
-
-  const visit = (node: ts.Node): void => {
-    kinds.push(node.kind);
-    ts.forEachChild(node, visit);
-  };
-  visit(sourceFile);
-
-  return sha256(kinds.join(","));
+  const definition = definitionFor(relativePath, text);
+  if (definition.parser === "typescript") return typeScriptSyntaxTreeHash(relativePath, text);
+  if (definition.parser === "tree-sitter") return treeSyntaxHash(definition, text);
+  if (definition.parser === "component") return componentHash(relativePath, text, true);
+  return nonCommentTokenHash(relativePath, text);
 }
 
-export function countCodeLines(text: string): number {
-  return text
-    .split(/\r?\n/)
-    .filter((line) => line.trim().length > 0 && !line.trim().startsWith("//")).length;
+export function countCodeLines(text: string, relativePath = "sample.ts"): number {
+  const comments = extractComments(relativePath, text);
+  const projection = commentProjection(
+    text,
+    comments.map((comment) => ({ start: comment.start, end: comment.end })),
+  );
+  return projection.split(/\r?\n/u).filter((line) => line.trim()).length;
 }

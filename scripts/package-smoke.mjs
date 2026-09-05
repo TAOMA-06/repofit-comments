@@ -114,7 +114,11 @@ try {
       ? {}
       : {
           npm_config_offline: "true",
-          REPOFIT_SMOKE_LOCAL_TYPESCRIPT: join(root, "node_modules", "typescript"),
+          REPOFIT_SMOKE_LOCAL_DEPENDENCIES: [
+            join(root, "node_modules", "typescript"),
+            join(root, "node_modules", "web-tree-sitter"),
+            join(root, "node_modules", "tree-sitter-wasms"),
+          ].join(process.platform === "win32" ? ";" : ":"),
         },
   );
 

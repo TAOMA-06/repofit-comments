@@ -13,7 +13,7 @@ const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const lockfile = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
 assert.equal(manifest.private, false, "release builds require private=false");
-assert.match(manifest.version, /^1\.0\.0-rc\.\d+$/);
+assert.match(manifest.version, /^1\.\d+\.\d+-(?:alpha|beta|rc)\.\d+$/);
 assert.equal(lockfile.version, manifest.version, "package-lock top-level version mismatch");
 assert.equal(lockfile.packages?.[""]?.version, manifest.version, "package-lock root version mismatch");
 const requiredNpmVersion = String(manifest.packageManager).replace(/^npm@/, "");

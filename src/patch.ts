@@ -14,6 +14,7 @@ import {
 } from "./git.js";
 import { decodeUtf8Bytes } from "./encoding.js";
 import { sha256 } from "./hash.js";
+import { supportsAutomaticFixes } from "./language-registry.js";
 import type { Finding, FixReceipt, PreparedFixReceipt, Scope } from "./model.js";
 import { RECEIPT_SCHEMA_VERSION } from "./model.js";
 import { protectedCommentHash } from "./protection.js";
@@ -260,6 +261,11 @@ export function applyFindings(
   }
   if (findings.some((finding) => finding.sourceHash !== first.sourceHash)) {
     throw new Error("A batch fix must come from one analysis snapshot.");
+  }
+  if (!supportsAutomaticFixes(first.relativePath)) {
+    throw new Error(
+      `Automatic fixes are unavailable for the ${first.relativePath} language adapter.`,
+    );
   }
 
   const receiptId = randomUUID();
