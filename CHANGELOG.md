@@ -4,6 +4,24 @@ All notable changes to RepoFit Comments are documented here. Versions follow Sem
 
 ## Unreleased
 
+## 1.1.0-alpha.1 - 2026-09-06
+
+### Added
+
+- Add a language registry and `repofit languages` capability report.
+- Add JavaScript/JSX through the existing TypeScript AST safety pipeline.
+- Add local Tree-sitter WASM adapters for Python, Go, Rust, Swift, Java, Kotlin, C#, C, C++, PHP, Ruby, Dart, Lua, and Shell.
+- Add component-script adapters for Vue and Svelte while keeping markup comments protected.
+- Add SQL scan-and-review support with quoted-string, dollar-string, and nested-comment handling.
+- Preserve native `//`, `#`, and `--` prefixes in deterministic rewrites.
+- Protect language-specific compiler, formatter, lint, build, and generated-code directives.
+
+### Security
+
+- Keep automatic fixes fail-closed when a grammar reports syntax errors or structural hashes change.
+- Keep SQL review-only until a dialect parser can meet the same syntax and token invariants.
+- Add multi-language raw-string, heredoc, CRLF, Unicode, component-boundary, and recoverable Python-fix regressions.
+
 ## 1.0.0-rc.1 - 2026-09-04
 
 ### Added

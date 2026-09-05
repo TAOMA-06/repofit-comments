@@ -1,5 +1,7 @@
 # RepoFit Comments V1 产品规格
 
+> 本文件记录 TypeScript 家族 v1 合同。`1.1.0-alpha.1` 三批语言扩展另见 [MULTILANGUAGE_EXPANSION.md](./MULTILANGUAGE_EXPANSION.md)。
+
 状态：Technical RC specification；本文件是 v1 产品与证据门槛的唯一规范来源
 
 研究与事实截点：2026-09-04

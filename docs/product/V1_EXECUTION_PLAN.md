@@ -1,5 +1,7 @@
 # RepoFit Comments v1 execution plan
 
+> This document records the completed TypeScript-family v1 plan. The `1.1.0-alpha.1` three-batch implementation is tracked in [MULTILANGUAGE_EXPANSION.md](./MULTILANGUAGE_EXPANSION.md).
+
 Date: 2026-09-04
 
 Status: working productization baseline

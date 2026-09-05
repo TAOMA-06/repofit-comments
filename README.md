@@ -2,50 +2,53 @@
 
 [![CI](https://github.com/TAOMA-06/repofit-comments/actions/workflows/ci.yml/badge.svg)](https://github.com/TAOMA-06/repofit-comments/actions/workflows/ci.yml)
 
-RepoFit Comments 是一个本地终端工具，用来检查当前 TypeScript 家族（`.ts`、`.tsx`、`.mts`、`.cts`）Git Diff 中显眼的生成式注释写法，并在可证明不改变代码时进行保守清理。
+RepoFit Comments 是一个本地终端工具，用来检查当前 Git Diff 中显眼的生成式注释写法，并在能够证明代码结构和受保护内容没有改变时进行保守清理。
 
-It focuses on presentation patterns such as numbered steps, decorative headings, nearby duplicates, narrow line-by-line restatements, tutorial tone, and generation-process narration. It does **not** determine who wrote code, falsify authorship, remove a hidden model watermark, or promise to bypass an AI detector.
+它处理编号步骤、装饰性标题、附近重复、逐行复述、教程语气和生成过程叙述。它不判断代码作者，也不输出所谓“AI 概率”。
 
-See [STATUS.md](./STATUS.md) for the exact evidence boundary. The public-history smoke cases are in [evidence/public-smoke-2026-09-03.md](./evidence/public-smoke-2026-09-03.md), and the live Grok 4.5 evaluation is in [evidence/grok-4.5-eval-2026-09-03.md](./evidence/grok-4.5-eval-2026-09-03.md).
+当前源码为 `1.1.0-alpha.1` 多语言开发版。公开的 `v1.0.0-rc.1` 仍是 TypeScript 家族 RC；多语言版本尚未推送或发布。详细状态见 [STATUS.md](./STATUS.md)，三批扩展能力与证据要求见 [MULTILANGUAGE_EXPANSION.md](./docs/product/MULTILANGUAGE_EXPANSION.md)。
 
-The source manifest is now `1.0.0-rc.1`. The Node 22/24 × macOS/Linux/Windows CI matrix is green, but that is not proof of npm publication, the build-once release workflow, maintainer evaluation, or stable `1.0.0` release gates. See [STATUS.md](./STATUS.md).
+## Language support
 
-Formal-product work is governed by the [V1 product specification](./docs/product/V1_PRODUCT_SPEC.md), [execution plan](./docs/product/V1_EXECUTION_PLAN.md), and [release strategy](./docs/product/V1_RELEASE_STRATEGY.md).
+运行 `repofit languages` 可以查看安装版本的完整能力表。
 
-## Current safety contract
+| 批次 | 语言 | 能力 |
+| --- | --- | --- |
+| 1 | TypeScript、JavaScript、Python、Go、Rust、Swift | 扫描和安全自动修复 |
+| 2 | Java、Kotlin、C#、C、C++、PHP、Ruby、Dart、Lua | 扫描和安全自动修复 |
+| 3 | Vue、Svelte、Shell | 扫描和安全自动修复 |
+| 3 | SQL | 扫描和人工审查建议 |
 
-- TypeScript family only: `.ts`, `.tsx`, `.mts`, and `.cts`.
-- Current Git diff only; staged changes are the default.
-- Read-only and offline during `check`, `preview`, `profile`, `explain`, and `doctor`.
-- Static repository policy comes only from `.repofit.json`; executable configuration is never loaded.
-- Reports include stable fingerprints, rule levels, protection reasons, reasoned suppressions, JSON, and SARIF 2.1.
-- Automatic changes require `--worktree`, are limited to one safe finding or one file's safe findings at a time, and are disabled on Windows until its write-security evidence gate passes.
-- A patch is built and validated in memory before writing.
-- A private write-ahead journal and byte-exact backup are persisted before source replacement.
-- Non-comment tokens and the comment-free syntax-tree shape must stay identical.
-- Protected comments must remain byte-for-byte identical and in order. A `Step N:` prefix may be removed while its protected rationale remains identical.
-- No staging, commits, pushes, dependency changes, or repository scripts.
+Vue 和 Svelte 的自动修复限于 `<script>` 区块；模板中的 HTML 注释保持受保护。SQL 方言差异较大，目前不会自动写入。
+
+## Safety contract
+
+- 只分析 staged、worktree 或相对 base ref 的新增和修改注释。
+- `check`、`preview`、`profile`、`explain`、`doctor` 和 `languages` 不执行目标仓库脚本，也不发送源码到网络。
+- TypeScript/JavaScript 使用 TypeScript AST；其他自动修复语言使用本地 Tree-sitter WASM 语法树。
+- 自动修改前后必须保持非注释 token、去注释语法树和受保护注释哈希一致。
+- 原文件或候选文件出现解析错误时拒绝自动修改。
+- 自动修改只接受 `--worktree`，每次只处理一条 finding 或一个明确文件。
+- 写入前保存私有、逐字节一致的备份和恢复日志；支持 `verify`、`recover` 和单层 `undo`。
+- 不执行 Git stage、commit 或 push。
+- Windows 继续提供只读扫描和 SARIF；自动写入等待独立的 DACL 与文件系统事务证据。
 
 ## Install for local development
 
-Requires Node.js 22.14 or newer.
+需要 Node.js 22.14 或更新版本。
 
 ```bash
 git clone https://github.com/TAOMA-06/repofit-comments.git
 cd repofit-comments
 npm install
 npm run build
+npm link
 ```
 
-You can either run `npm link` to create the `repofit` command, or call the included local wrapper from inside a target Git repository:
+## Commands
 
 ```bash
-/absolute/path/to/repofit-comments/repofit check --staged
-```
-
-After linking, the shorter commands are:
-
-```bash
+repofit languages
 repofit init
 repofit doctor
 repofit check --staged
@@ -55,7 +58,7 @@ repofit preview --staged
 repofit explain <finding-id> --staged
 repofit fix <finding-id> --worktree --dry-run
 repofit fix <finding-id> --worktree --apply
-repofit fix --all-safe --file src/example.ts --worktree --apply
+repofit fix --all-safe --file src/example.py --worktree --apply
 repofit verify
 repofit verify --staged
 repofit recover
@@ -65,17 +68,17 @@ repofit history prune --keep 20
 repofit history prune --keep 20 --apply
 ```
 
-The Alpha form `repofit comments <command>` remains compatible.
+旧版 `repofit comments <command>` 命令形式保持兼容。
 
 ## Repository configuration
 
-`repofit init` creates a complete, deterministic `.repofit.json`. It supports include/exclude globs, additional protected phrases and paths, rule levels, `failOn`, resource limits, and terminal/JSON/SARIF defaults. Unknown fields, executable config files, symlinks, invalid UTF-8, unsupported schema versions, and limits above the built-in safety ceilings are rejected.
+`repofit init` 创建静态 `.repofit.json`。配置支持 include/exclude glob、额外保护短语和路径、规则级别、失败阈值、资源上限和默认输出格式。工具拒绝未知字段、可执行配置、配置符号链接、无效 UTF-8、路径穿越和超过安全上限的值。
 
 ```json
 {
   "schemaVersion": "1.0",
   "rulePackVersion": "1.0.0",
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "include": ["src/**/*.ts", "src/**/*.py", "Sources/**/*.swift"],
   "exclude": ["**/generated/**"],
   "protect": {
     "phrases": ["backward-compatible wire format"],
@@ -90,93 +93,44 @@ The Alpha form `repofit comments <command>` remains compatible.
 }
 ```
 
-One finding can be suppressed only with a reason:
+抑制规则必须写明理由，并会出现在报告中。注释前缀使用所在语言的原生形式：
 
-```ts
-// repofit-ignore-next-line comments.step-label -- mirrors the numbered protocol in docs
-// Step 1
+```python
+# repofit-ignore-next-line comments.step-label -- mirrors the numbered protocol in docs
+# Step 1
+run_protocol()
 ```
 
-The directive and reason are shown in machine and terminal output. Configuration can add protection or disable reporting, but it cannot promote suggestion-only rules into automatic writes.
+## Findings and recovery
+
+| Action | Meaning |
+| --- | --- |
+| `remove-safe` | 确定性规则可以删除该独立行注释，写入前仍需完整验证。 |
+| `rewrite-safe` | 提供确定性的注释改写，例如删除 `Step N:` 前缀并保留解释。 |
+| `rewrite-suggested` | 只给出审查建议，不会自动写入。 |
+| `keep-protected` | 法律、工具指令、文档、约束、理由或其他重要注释。 |
+| `uncertain` | 证据不足，默认隐藏。 |
+
+每次写入在 `.git/repofit-comments/` 下保存 receipt 和备份。POSIX 目录与文件使用私有权限，并通过仓库级写锁和 no-clobber 事务处理并发修改。`verify --staged` 可以确认 Git index 中是修复后的字节；`undo` 不改变 index。
+
+自动修复单文件上限为 2 MiB。恢复数据达到 200 条记录或 64 MiB 时停止接受新写入。`history prune` 默认只预览，不选择最新或未完成的记录，并能恢复被中断的清理。
 
 ## GitHub Action and schemas
 
-The repository includes a consumer [Action definition](./action.yml) and a [version-pinned example workflow](./examples/github-action.yml). The Action emits SARIF but does not upload it itself; the calling workflow controls the `security-events: write` permission and upload step.
+仓库包含 [Action definition](./action.yml) 和 [version-pinned example](./examples/github-action.yml)。Action 输出 SARIF；调用方负责配置 `security-events: write` 并上传结果。
 
-Versioned schemas for configuration, reports, errors, fix previews, receipts, doctor, and history are shipped under [`schemas/`](./schemas/). SARIF follows version 2.1.0.
-
-`--all-safe` is deliberately file-scoped. If safe findings span multiple files, RepoFit refuses to choose for you and requires `--file`.
-
-Staged and base scopes are read-only. After a worktree fix, run `verify`, stage the repaired file yourself, then run `verify --staged` to prove that the Git index contains the repaired bytes.
-
-Every applied fix stores a byte-exact receipt and backup under `.git/repofit-comments/`; on POSIX systems the directories use mode `0700` and files use mode `0600`. Windows DACL privacy is not yet verified, so Windows automatic writes remain outside the current local evidence claim. A repository-wide writer lock and recoverable no-clobber transaction prevent RepoFit operations from interleaving and capture ordinary last-moment edits instead of overwriting them. The source path can be briefly absent between displacement and candidate installation; this is not marketed as an atomic rename. `verify` succeeds only for an `applied` journal; after an interrupted operation, `recover` reconciles the journal with the two known byte states. `undo` is deliberately one level: it restores the latest journal only when that journal is still `applied` and its hash and mode match. It does not search older history past an aborted or already-undone journal. Neither command changes the Git index, so a previously staged repaired blob remains staged until you update it yourself.
-
-Schema 3 upgrades preserve a schema 2 Alpha receipt in `.git/repofit-comments/legacy/`, tighten the data directory on POSIX, and then start new recoverable history. Schema 2 can be inspected but cannot be undone because the Alpha did not store a byte-exact backup.
-
-Automatic fixes currently accept source files up to 2 MiB. Admission of a new fix is fail-closed at 200 receipt records or 64 MiB of recovery data; transitions needed to recover an already-admitted journal are not blocked by that quota. `history prune` is dry-run-first, never selects the latest or a non-terminal journal, deletes receipt/backup pairs under the repository lock, and resumes an interrupted prune from its private marker.
-
-Use `--format json` for machine-readable command output and `--format sarif` with `check` or `preview`. Versioned schemas are shipped in [`schemas/`](./schemas/).
-
-## Repository configuration
-
-`repofit init` creates a complete static `.repofit.json`. It supports include/exclude paths, additional protected phrases/paths, per-rule `off|info|warning|error`, `failOn`, display language/format, and hard-bounded analysis/recovery resources. Unknown fields, versions, symlinks, invalid UTF-8, traversal patterns, and values above product ceilings are rejected.
-
-Inline suppression requires a reason and is visible in reports:
-
-```ts
-// repofit-ignore-next-line comments.step-label -- mirrors the numbered protocol in docs
-// Step 1
-runProtocol();
-```
-
-Configuration can only remove or lower findings; it cannot promote suggestion-only rules into automatic writes or disable built-in legal/tooling/security/rationale protection.
-
-## GitHub Action
-
-The repository includes a consumer `action.yml` and a version-pinned example at [`examples/github-action.yml`](./examples/github-action.yml). The Action scans a base-to-HEAD diff and emits SARIF without treating findings as proof of AI authorship. Uploading SARIF requires the caller's explicit `security-events: write` permission.
+配置、报告、错误、修复预览、receipt、诊断、历史和语言能力的 JSON Schema 位于 [`schemas/`](./schemas/)。
 
 ## Exit codes
 
 | Code | Meaning |
 | --- | --- |
-| `0` | The command completed and no actionable finding or verification failure remains. |
-| `1` | `check` or `preview` met the configured `failOn` threshold. |
-| `2` | Command arguments are invalid. |
-| `3` | Analysis, Git, parsing, encoding, or another runtime step failed. |
-| `4` | A saved fix receipt did not verify against the selected target. |
-| `5` | A requested write was refused or could not be safely applied. |
-
-With `--format json`, failures are written to stderr as a versioned JSON error object. Human terminal errors escape repository-controlled control characters.
-
-## Finding actions
-
-| Action | Meaning |
-| --- | --- |
-| `remove-safe` | A narrow deterministic rule can remove this standalone line comment. Writing requires an explicit finding ID, or a single-file `--all-safe` transaction, plus `--apply`. |
-| `rewrite-safe` | A deterministic comment-only rewrite is available, such as removing a numbered `Step N:` prefix while preserving the rest of the sentence. |
-| `rewrite-suggested` | The comment looks verbose or mismatched, but RepoFit will not write the suggestion automatically. |
-| `keep-protected` | Legal, tooling, API, safety, compatibility, tracking, or other important comment. Never automatically changed. |
-| `uncertain` | Evidence is insufficient. Hidden by default. |
-
-## Protected comments
-
-The protection pass runs before style rules. It protects, among other things:
-
-- copyright, SPDX, license, authorship, and attribution;
-- JSDoc, block comments, and leading file/module comments;
-- ESLint, Prettier, TypeScript, coverage, source-map, and bundler directives;
-- generated-file markers, URLs, issue IDs, TODO/FIXME/HACK markers;
-- rationale, constraints, security, privacy, concurrency, compatibility, schema, units, versions, and migration notes;
-- possible commented-out code;
-- generated headers and generated/vendor/minified/fixture/migration/snapshot/declaration paths, which protect the entire file before comment rules run.
-
-When unsure, RepoFit keeps the comment.
-
-## Repository style profile
-
-RepoFit samples unchanged tracked files from `HEAD`, prioritizing the same directory and top-level module. Repository-specific style conclusions are enabled only with at least five reference files and thirty ordinary comments. Otherwise the report says `insufficient-style-baseline`; deterministic removals and clearly labeled review-only heuristics may still appear.
-
-The profile is deliberately small: comment density, average length, dominant language, common phrases, and a few nearby examples. It is not an authorship model.
+| `0` | 命令完成，没有达到失败阈值的 finding。 |
+| `1` | `check` 或 `preview` 达到配置的 `failOn` 阈值。 |
+| `2` | 命令参数无效。 |
+| `3` | 分析、Git、解析、编码或运行步骤失败。 |
+| `4` | 保存的修复记录没有通过验证。 |
+| `5` | 写入请求被安全边界拒绝。 |
 
 ## Development
 
@@ -187,8 +141,4 @@ npm run test:package
 npm run benchmark
 ```
 
-The package export map blocks internal library subpaths because the supported contract is CLI-only. The RC workflow builds one tarball, tests those same bytes across the configured matrix, generates SPDX SBOM/checksums, and prepares attestations. Running that workflow, staging npm, approving with 2FA, tagging, and publishing a GitHub Release remain separate external actions.
-
-## License
-
-MIT. See [LICENSE](./LICENSE).
+支持的 npm 契约目前是 CLI 和版本化 Schema；内部模块不作为公共 API。许可证为 MIT，见 [LICENSE](./LICENSE)。
