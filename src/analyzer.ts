@@ -49,7 +49,7 @@ for (const definition of LANGUAGE_DEFINITIONS) {
   if (definition.parser !== "tree-sitter" || !definition.grammarFile) continue;
   if (languageCache.has(definition.grammarFile)) continue;
   const grammarPath = require.resolve(
-    `tree-sitter-wasms/out/${definition.grammarFile}`,
+    definition.grammarPackage ?? `tree-sitter-wasms/out/${definition.grammarFile}`,
   );
   languageCache.set(definition.grammarFile, await Language.load(grammarPath));
 }

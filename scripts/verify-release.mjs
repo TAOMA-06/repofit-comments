@@ -46,7 +46,12 @@ assert.ok(
       item.primaryPackagePurpose === "APPLICATION",
   ),
 );
-for (const dependency of ["typescript", "web-tree-sitter", "tree-sitter-wasms"]) {
+for (const dependency of [
+  "typescript",
+  "web-tree-sitter",
+  "tree-sitter-wasms",
+  "tree-sitter-bash",
+]) {
   assert.ok(
     sbom.packages.some((item) => item.name === dependency),
     `SBOM is missing runtime dependency ${dependency}`,

@@ -3,6 +3,8 @@ import type { SourceComment } from "./model.js";
 
 export const RATIONALE_PROTECTION_REASON =
   "Possible rationale, constraint, compatibility, or invariant.";
+export const LEADING_COMMENT_PROTECTION_REASON =
+  "Leading file comments are protected as possible headers or module documentation.";
 
 const STEP_NARRATION_PATTERN = /^(?:(?:step|phase|part)\s*(?:\d+|one|two|three|four|five)|步骤\s*[一二三四五六七八九十\d]+)\s*[:：.\-]\s*(\S.*)$/i;
 
@@ -72,7 +74,7 @@ export function protectedReason(
     return "Documentation comments are protected.";
   }
   if (comment.leadingFileComment) {
-    return "Leading file comments are protected as possible headers or module documentation.";
+    return LEADING_COMMENT_PROTECTION_REASON;
   }
   if (LEGAL_PATTERN.test(value)) {
     return "Legal, authorship, or attribution comment.";
@@ -109,7 +111,10 @@ export function protectedCommentHash(
       if (reason === undefined) {
         return [];
       }
-      if (reason === RATIONALE_PROTECTION_REASON) {
+      if (
+        reason === RATIONALE_PROTECTION_REASON ||
+        reason === LEADING_COMMENT_PROTECTION_REASON
+      ) {
         return [stepNarrationReplacement(comment) ?? comment.raw];
       }
       return [comment.raw];

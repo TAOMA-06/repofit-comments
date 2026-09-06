@@ -164,6 +164,23 @@ test("multi-line language comments are always protected as blocks", () => {
   }
 });
 
+test("leading step narration loses only its prefix while ordinary headers stay protected", () => {
+  const source = "# Step 1: calculate the result\n# Copyright 2026 Example\nvalue = 1\n";
+  const comments = extractComments("leading.py", source);
+  const result = analyzeComments(comments, "source-hash", sparseProfile, 3);
+  assert.equal(result.findings.length, 1);
+  assert.equal(result.findings[0]?.action, "rewrite-safe");
+  assert.equal(result.findings[0]?.suggestedReplacement, "# Calculate the result");
+  assert.equal(result.protections.length, 1);
+  const finding = result.findings[0];
+  assert.ok(finding);
+  const candidate =
+    source.slice(0, finding.commentStart) +
+    finding.suggestedReplacement +
+    source.slice(finding.commentEnd);
+  assert.equal(verifyCandidate("leading.py", source, candidate).valid, true);
+});
+
 test("SQL scanning handles quoted, dollar-quoted, and nested-comment content", () => {
   const source = [
     "select '-- Step 9: fake';",

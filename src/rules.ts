@@ -10,6 +10,7 @@ import type {
 import {
   commentLanguage,
   lineCommentPrefix,
+  LEADING_COMMENT_PROTECTION_REASON,
   normalizeComment,
   protectedReason,
   RATIONALE_PROTECTION_REASON,
@@ -217,7 +218,9 @@ export function analyzeComments(
     const stepReplacement = stepNarrationReplacement(comment);
     const canStripStepPrefix =
       stepReplacement !== undefined &&
-      (protection === undefined || protection === RATIONALE_PROTECTION_REASON);
+      (protection === undefined ||
+        protection === RATIONALE_PROTECTION_REASON ||
+        protection === LEADING_COMMENT_PROTECTION_REASON);
     if (protection && !canStripStepPrefix) {
       protections.push({
         action: "keep-protected",

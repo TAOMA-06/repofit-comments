@@ -30,6 +30,7 @@ export interface LanguageDefinition {
   readonly extensions: readonly string[];
   readonly parser: ParserKind;
   readonly grammarFile?: string;
+  readonly grammarPackage?: string;
   readonly automaticFixes: boolean;
 }
 
@@ -190,6 +191,7 @@ export const LANGUAGE_DEFINITIONS: readonly LanguageDefinition[] = [
     extensions: [".sh", ".bash", ".zsh"],
     parser: "tree-sitter",
     grammarFile: "tree-sitter-bash.wasm",
+    grammarPackage: "tree-sitter-bash/tree-sitter-bash.wasm",
     automaticFixes: true,
   },
   {

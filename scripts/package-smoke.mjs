@@ -118,6 +118,7 @@ try {
             join(root, "node_modules", "typescript"),
             join(root, "node_modules", "web-tree-sitter"),
             join(root, "node_modules", "tree-sitter-wasms"),
+            join(root, "node_modules", "tree-sitter-bash"),
           ].join(process.platform === "win32" ? ";" : ":"),
         },
   );
