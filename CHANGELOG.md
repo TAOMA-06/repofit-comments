@@ -21,6 +21,8 @@ All notable changes to RepoFit Comments are documented here. Versions follow Sem
 - Keep automatic fixes fail-closed when a grammar reports syntax errors or structural hashes change.
 - Keep SQL review-only until a dialect parser can meet the same syntax and token invariants.
 - Add multi-language raw-string, heredoc, CRLF, Unicode, component-boundary, and recoverable Python-fix regressions.
+- Use the current standalone Bash WASM after the live Muse fixture exposed an incompatible legacy dynamic-linking format.
+- Allow deterministic `Step N:` prefix removal at the start of a file while preserving the full explanation and continuing to protect ordinary headers and bare step labels.
 
 ## 1.0.0-rc.1 - 2026-09-04
 

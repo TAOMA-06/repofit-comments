@@ -36,9 +36,9 @@ Date: 2026-09-06
 ## Locally verified
 
 - Strict TypeScript check passes.
-- 139 automated tests pass on the current multi-language branch.
-- Node's experimental coverage run reports 94.01% overall line coverage, 81.65% branch coverage, and 97.40% function coverage; subprocess-rendered terminal paths are not fully attributed to the parent coverage report.
-- The final local performance gate scans a 10,000-changed-line fixture in 324.7 ms and a 100-file fixture in 355.2 ms on this workspace, below the 10-second and 5-second thresholds respectively. Cold `repofit languages --format json` startup was 0.37 seconds. These are single-run local measurements, not remote P95 evidence.
+- 140 automated tests pass on the current multi-language branch.
+- Node's experimental coverage run reports 94.11% overall line coverage, 81.89% branch coverage, and 97.41% function coverage; subprocess-rendered terminal paths are not fully attributed to the parent coverage report.
+- The final local performance gate scans a 10,000-changed-line fixture in 330.2 ms and a 100-file fixture in 374.5 ms on this workspace, below the 10-second and 5-second thresholds respectively. Cold `repofit languages --format json` startup was 0.20 seconds. These are single-run local measurements, not remote P95 evidence.
 - End-to-end tests cover staged, worktree, and base scopes; worktree-only apply; staged-fix refusal; staged receipt verification; dry-run; one-finding apply; single-file batch apply; and concurrent edit refusal.
 - Edge tests cover strings and template literals containing comment-like text, changed-line filtering, protected directives, legal and rationale comments, rationale-preserving step-prefix rewrites, numeric constraints, CRLF, TSX block comments, MTS/CTS, whole-file generated protection, parse ranges, token equivalence, syntax-tree equivalence, symbolic-link refusal, and style-profile readiness.
 - Adversarial Git tests prove inherited/configured external diff commands, attribute-selected diff drivers, textconv drivers, and `GIT_CONFIG_COUNT` injection are not executed.
@@ -46,10 +46,11 @@ Date: 2026-09-06
 - Encoding/path tests reject invalid UTF-8 in the worktree and index, preserve a UTF-8 BOM through an applied fix, and reject parent symlink/junction paths that resolve outside the repository.
 - CLI contract tests reject irrelevant arguments, source `--version` from `package.json`, and distinguish usage, runtime, verification, and write-refusal exit categories; JSON failures use a versioned stderr envelope.
 - Recovery tests cover private receipt/backup/directory modes on the current POSIX host, repository identity, exact byte and mode restoration, active/stale locks, hard-link refusal, ordinary last-moment edit capture, coordinated backup/receipt tampering, history isolation, and injected interruption before, during, and after source replacement and undo.
-- The 2026-09-06 online runtime dependency audit, including TypeScript, web-tree-sitter, and tree-sitter-wasms, reported 0 known vulnerabilities.
+- The 2026-09-06 online runtime dependency audit, including TypeScript, web-tree-sitter, tree-sitter-wasms, and the dedicated current Bash grammar, reported 0 known vulnerabilities.
 - Package smoke builds in an isolated clean directory, checks an exact tarball allowlist, and excludes tests, development sources, product-status documents, and evaluation evidence.
 - The `1.1.0-alpha.1` tarball passed both offline exact-dependency installation and fresh npm-registry dependency resolution; the installed CLI listed all 19 adapters and completed TypeScript plus Python analysis/fix checks.
 - Multi-language tests cover all 19 adapters in one Git diff, native prefix rewriting for every automatic-fix language, string/raw-string/heredoc false positives, CRLF and Unicode offsets, syntax-error refusal, component boundaries, SQL quoted forms, language directives, and an applied/verified Python transaction.
+- A live Hermes Muse Spark 1.3 contributor-free evaluation changed 19 tracked synthetic files across all batches. RepoFit found all 38 numbered narration comments with zero string-marker false positives and zero parse errors, applied 36 safe rewrites across 18 files with per-file verification, kept SQL review-only, and passed the available native tests before and after cleanup. The fixture exposed an incompatible legacy Bash WASM before release; the adapter now uses the current `tree-sitter-bash` WASM and has a regression test.
 - A packed tarball built from an isolated clean directory installs in a clean prefix; its installed binary completes version reporting, one-finding and Grok four-finding batch apply, worktree/staged verification, exact undo without index mutation, post-cleanup zero-finding scan, the Grok fixture's 4/4 tests, and internal-import blocking. Local smoke also supports the exact installed TypeScript runtime offline.
 - Historical v1 evidence: PR `#1` merged as `7c65297`; tag `v1.0.0-rc.1`, main/tag CI, build-once release workflow `33878935406`, six installed-tarball jobs, online audit, SBOM, checksums, attestations, and a GitHub draft prerelease all passed.
 
