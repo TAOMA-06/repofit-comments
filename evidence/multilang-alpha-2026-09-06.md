@@ -1,16 +1,16 @@
-# Multi-language alpha local evidence
+# Multi-language alpha release evidence
 
 Date: 2026-09-06
 
 Version: `1.1.0-alpha.1`
 
-Branch: `product/multilang-batches`
+Release tag: `v1.1.0-alpha.1`
 
 Implementation commits: `98ae321`, Bash compatibility fix `b373fe4`, and Node 24 launcher fix `ab714f0`
 
-Verified implementation snapshot: `ab714f037818d3869fd9680b4158bb35e7f5e731`
+Verified release snapshot: `bb618770807d739fc51f460f4605e0c6bcc2e17b`
 
-Status: local generated-code/package evidence plus a successful remote cross-platform implementation matrix. PR `#2` is open; the alpha is not yet merged or released.
+Status: PR `#2` is merged and `v1.1.0-alpha.1` is a public GitHub prerelease. Local model-generated replay, final installed-tarball replay, cross-platform CI, release asset verification, and GitHub artifact attestations passed. npm, Homebrew, and stable distribution remain unpublished.
 
 ## Implemented batches
 
@@ -42,14 +42,16 @@ Status: local generated-code/package evidence plus a successful remote cross-pla
 - Local benchmarks: 10,000 changed lines in 330.2 ms; 100 changed files in 374.5 ms; cold `languages --format json` startup in 0.20 seconds.
 - The final package content produced `repofit-comments-1.1.0-alpha.1.tgz` with SHA-256 `715e97703d795037e38eee4ca1d57c8302e665b20f00c0e1e451779180363d36` and npm integrity `sha512-ePLfroJNG97qNnfStH9//K9EFxfQKYaoRug2Xkoi3T8YA2201DGRAy3NjoNyKKO3NrKMomfDghpURZQqBU0AWg==`.
 - The release verifier accepted the manifest, exact allowlist, checksums, SPDX application metadata, and all four runtime dependencies; the exact tarball then passed installed smoke.
+- Final PR run `34010491944` passed all six Node 22/24 by Ubuntu/macOS/Windows jobs and the benchmark before merge commit `bb618770807d739fc51f460f4605e0c6bcc2e17b` was created.
+- Release run `34010649842` passed the online runtime audit, strict check, 140 tests, six installed-tarball smoke jobs, manifest/SBOM/checksum checks, and artifact attestations.
+- Public GitHub release: <https://github.com/TAOMA-06/repofit-comments/releases/tag/v1.1.0-alpha.1>. The published tarball SHA-256 is `715e97703d795037e38eee4ca1d57c8302e665b20f00c0e1e451779180363d36`.
 
-## Evidence not yet obtained
+## External evidence not yet obtained
 
 - No independent real-repository corpus has been evaluated for the new language families.
-- Node 22/24 by macOS/Linux/Windows implementation CI passed in run `34010327234` after the Node 24 runtime fix.
 - Windows automatic writes remain disabled by the existing product boundary.
 - SQL automatic writing remains disabled.
-- No multi-language tag, GitHub Release, npm package, or Homebrew distribution has been created.
+- No npm package, Homebrew formula, stable release, or production distribution has been created.
 
 ## Hermes Muse Spark 1.3 live evaluation
 
