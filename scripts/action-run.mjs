@@ -42,7 +42,7 @@ if (
   throw new Error("RepoFit Action output parent resolves outside the repository workspace.");
 }
 if (existsSync(outputPath)) throw new Error("RepoFit Action refuses to overwrite an existing output file.");
-const cliPath = fileURLToPath(new URL("../dist/src/cli.js", import.meta.url));
+const cliPath = fileURLToPath(new URL("../dist/src/launcher.js", import.meta.url));
 const result = spawnSync(
   process.execPath,
   [cliPath, "check", "--base", base, "--format", "sarif", "--cwd", workspace],

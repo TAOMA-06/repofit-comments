@@ -20,7 +20,7 @@
   "packageManager": "npm@11.19.1",
   "type": "module",
   "bin": {
-    "repofit": "dist/src/cli.js"
+    "repofit": "dist/src/launcher.js"
   },
   "exports": {
     "./package.json": "./package.json",
@@ -35,10 +35,10 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "benchmark": "npm run build && node scripts/benchmark.mjs",
+    "benchmark": "npm run build && node --liftoff-only scripts/benchmark.mjs",
     "check": "tsc -p tsconfig.json --noEmit",
     "prepare": "npm run build",
-    "test": "npm run build && node --test dist/test/*.test.js",
+    "test": "npm run build && node --liftoff-only --test dist/test/*.test.js",
     "test:package": "node scripts/package-smoke.mjs"
   },
   "engines": {

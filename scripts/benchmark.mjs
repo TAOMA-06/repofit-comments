@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const cli = join(root, "dist", "src", "cli.js");
+const cli = join(root, "dist", "src", "launcher.js");
 const fixture = mkdtempSync(join(tmpdir(), "repofit-benchmark-"));
 const manyFilesFixture = mkdtempSync(join(tmpdir(), "repofit-benchmark-files-"));
 

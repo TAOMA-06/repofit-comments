@@ -69,7 +69,7 @@ const expectedPaths = [
   ...listFiles(join(root, "schemas"), "schemas"),
 ].sort();
 assert.deepEqual(packagedPaths, expectedPaths, "release tarball allowlist mismatch");
-assert.equal(run(process.execPath, ["dist/src/cli.js", "--version"]).trim(), manifest.version);
+assert.equal(run(process.execPath, ["dist/src/launcher.js", "--version"]).trim(), manifest.version);
 const tarballPath = resolve(outputDirectory, tarballName);
 const sbomName = `${manifest.name}-${manifest.version}.spdx.json`;
 const sbomPath = resolve(outputDirectory, sbomName);
