@@ -6,9 +6,9 @@ Version: `1.1.0-alpha.1`
 
 Branch: `product/multilang-batches`
 
-Implementation commit: `98ae321`
+Implementation commits: `98ae321` and Bash compatibility fix `b373fe4`
 
-Verified source snapshot: `be534e17afe08e104e27e6dda1b1af2d992058c3`
+Verified source snapshot: `1e2c2e09515dd414754bd4fae05a1ce3c343fe9c`
 
 Status: local implementation evidence. The branch has not been pushed and the multi-language matrix has not run remotely.
 
@@ -40,8 +40,8 @@ Status: local implementation evidence. The branch has not been pushed and the mu
 - The isolated `1.1.0-alpha.1` package passed exact local dependency installation and fresh npm-registry dependency resolution. Its installed CLI loaded all grammars, listed 19 adapters, and exercised TypeScript and Python findings.
 - Online production-dependency audit reported 0 known vulnerabilities.
 - Local benchmarks: 10,000 changed lines in 330.2 ms; 100 changed files in 374.5 ms; cold `languages --format json` startup in 0.20 seconds.
-- The clean source snapshot produced `repofit-comments-1.1.0-alpha.1.tgz` with SHA-256 `0a4d2473b9233111ed845d3c0964360b80e471c6239a609f9a1c0e00e465fd56` and npm integrity `sha512-RKYl+6YN0CfFoP4Wtfp/wpkHNLD/9kwnvbSTqZoA1V+GD3Oh52drgZQUiF2ANwuQl4N6QgM9KQMs+bLQ9mtNfQ==`.
-- The release verifier accepted the manifest, exact allowlist, checksums, SPDX application metadata, and all three runtime dependencies; the exact tarball then passed installed smoke.
+- The clean source snapshot produced `repofit-comments-1.1.0-alpha.1.tgz` with SHA-256 `ea9589fbc6dede7072647b02cab6f9a6dd211101118687e5b0bca90dba6e7872` and npm integrity `sha512-6iyAWVDLQ8DfYKjoO9e+EtMJCUMDYHLMdX8cFFws3Rkc66hB22Qg7+HhA+ar6nwMLmVxsZcCGGaarzADdRgJzA==`.
+- The release verifier accepted the manifest, exact allowlist, checksums, SPDX application metadata, and all four runtime dependencies; the exact tarball then passed installed smoke.
 
 ## Evidence not yet obtained
 
@@ -64,3 +64,4 @@ Hermes ran `muse-spark-1.3-contributor-free` with low reasoning in a temporary G
 - Post-cleanup scan: 0 safe findings, 30 review suggestions, 0 non-SQL `Step N:` prefixes, and 0 parse errors. The remaining two `Step N:` prefixes belong to SQL's review-only adapter.
 - Shell undo restored SHA-256 `78d9b3ec23f59c0968eba362560214af0bf8a39d5db88a516b641dc416cd3642`; re-apply returned SHA-256 `63531272ace3ee90b60fd1a2e9dfed0d554c17fc9de879f41684d1e5156660da` and verified again.
 - All available native checks passed again after cleanup.
+- The final tarball was installed in a second clean prefix and replayed against a raw snapshot reconstructed byte-for-byte from RepoFit backups: the same 19/64/20/36/2/0 result appeared, all 18 files applied and verified again, post-cleanup safe findings reached zero, and all available native checks passed.
