@@ -4,7 +4,7 @@ Date: 2026-09-06
 
 ## Current classification
 
-**Public PR `#2` contains the `1.1.0-alpha.1` three-batch language expansion and its cross-platform CI is green. It is not yet merged or released. Public `v1.0.0-rc.1` remains the TypeScript-family draft prerelease.**
+**The `1.1.0-alpha.1` three-batch language expansion is merged and published as a GitHub prerelease. Its source, release assets, attestations, installed-package smoke, and Node 22/24 cross-platform matrices are verified. npm, Homebrew, and stable `1.1.0` distribution remain unpublished.**
 
 ## Implemented
 
@@ -54,6 +54,9 @@ Date: 2026-09-06
 - A packed tarball built from an isolated clean directory installs in a clean prefix; its installed binary completes version reporting, one-finding and Grok four-finding batch apply, worktree/staged verification, exact undo without index mutation, post-cleanup zero-finding scan, the Grok fixture's 4/4 tests, and internal-import blocking. Local smoke also supports the exact installed TypeScript runtime offline.
 - Historical v1 evidence: PR `#1` merged as `7c65297`; tag `v1.0.0-rc.1`, main/tag CI, build-once release workflow `33878935406`, six installed-tarball jobs, online audit, SBOM, checksums, attestations, and a GitHub draft prerelease all passed.
 - [GitHub Actions run 34010327234](https://github.com/TAOMA-06/repofit-comments/actions/runs/34010327234) passed on multi-language implementation head `ab714f0`: Node 22/24 on Ubuntu, macOS, and Windows all completed strict checking, 140 tests, and fresh-registry package smoke; the benchmark also passed.
+- PR [`#2`](https://github.com/TAOMA-06/repofit-comments/pull/2) merged as `bb618770807d739fc51f460f4605e0c6bcc2e17b` after [final PR CI run 34010491944](https://github.com/TAOMA-06/repofit-comments/actions/runs/34010491944) passed all six Node/OS jobs and the benchmark.
+- Tag [`v1.1.0-alpha.1`](https://github.com/TAOMA-06/repofit-comments/releases/tag/v1.1.0-alpha.1) resolves to the merge commit. [Release run 34010649842](https://github.com/TAOMA-06/repofit-comments/actions/runs/34010649842) passed the online runtime audit, 140 tests, six installed-tarball smoke jobs, manifest/SBOM/checksum verification, and artifact attestations before the GitHub prerelease was made public.
+- The published tarball SHA-256 is `715e97703d795037e38eee4ca1d57c8302e665b20f00c0e1e451779180363d36`; the release also includes an SPDX SBOM, release manifest, and `SHA256SUMS`.
 
 ## Live model-generated evaluation
 
@@ -86,7 +89,7 @@ These are useful smoke cases, not a statistically valid precision or recall stud
 
 - The v1 corpus of at least twenty independent repositories and two hundred real development diffs has not been collected.
 - Maintainer blind A/B preference, real-world precision, recall, false-positive, and suggestion-acceptance thresholds have not been measured.
-- The source and TypeScript-family RC tag are public at [`TAOMA-06/repofit-comments`](https://github.com/TAOMA-06/repofit-comments). The RC Release remains draft; no npm package, Homebrew formula, stable release, or production distribution has been created.
+- The source and multi-language alpha prerelease are public at [`TAOMA-06/repofit-comments`](https://github.com/TAOMA-06/repofit-comments). No npm package, Homebrew formula, stable release, or production distribution has been created.
 - Node.js 22/24 on macOS, Ubuntu, and Windows are verified for both the TypeScript-family RC and the `1.1.0-alpha.1` multi-language implementation. The first alpha run exposed a Node 24 V8 WASM Zone OOM; the CLI/test launcher now starts Node 24 WASM work with `--liftoff-only`, and the replacement matrix passed.
 - The multi-language corpus has not yet been replayed on independent real repositories. Current evidence is deterministic fixture coverage, so no cross-language precision/recall or maintainer-preference claim is made.
 - SQL automatic writes, suggestion-only rewriting, variable renaming, and structural cleanup remain out of scope.
