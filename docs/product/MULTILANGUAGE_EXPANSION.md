@@ -70,3 +70,5 @@ Vue/Svelte 的 `<script>` 内容按 JavaScript 或 TypeScript 解析。模板 HT
 发布前使用 Hermes 的 `muse-spark-1.3-contributor-free` 在隔离仓库中生成三个批次共 19 个文件。输入仅包含合成任务和桩代码。原始输出包含 64 条真实注释、38 条 `Step 1/2` 叙述、19 个理由注释和19 个字符串伪标记。
 
 初次联合扫描暴露旧 Bash WASM 与当前 Tree-sitter runtime 的动态链接不兼容。该问题在发布前修复为独立的 `tree-sitter-bash@0.25.1` WASM。最终原始扫描识别全部 38 条编号叙述：36 条属于18个可写适配器，SQL 的2条降级为人工建议；字符串误报和解析错误均为0。36条安全改写逐文件应用并逐次验证，复扫自动修复项为0，Shell undo 后逐字节恢复原始哈希并可重新应用。
+
+首次远端矩阵继续暴露 Node 24 V8 在多语法 WASM 测试中的 `Fatal process out of memory: Zone`。RepoFit 增加跨平台 JavaScript launcher，在 Node 24 子进程和测试入口启用 `--liftoff-only`；相同 Node 24.20.0 的本地定向测试通过，随后 [run 34010327234](https://github.com/TAOMA-06/repofit-comments/actions/runs/34010327234) 的六个系统/Node 组合及 package smoke 全部通过。

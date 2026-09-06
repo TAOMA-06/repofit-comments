@@ -4,7 +4,7 @@ Date: 2026-09-06
 
 ## Current classification
 
-**Local `1.1.0-alpha.1` implements the three planned language-expansion batches on `product/multilang-batches`. It has not been pushed or released. Public `v1.0.0-rc.1` remains the TypeScript-family draft prerelease.**
+**Public PR `#2` contains the `1.1.0-alpha.1` three-batch language expansion and its cross-platform CI is green. It is not yet merged or released. Public `v1.0.0-rc.1` remains the TypeScript-family draft prerelease.**
 
 ## Implemented
 
@@ -53,6 +53,7 @@ Date: 2026-09-06
 - A live Hermes Muse Spark 1.3 contributor-free evaluation changed 19 tracked synthetic files across all batches. RepoFit found all 38 numbered narration comments with zero string-marker false positives and zero parse errors, applied 36 safe rewrites across 18 files with per-file verification, kept SQL review-only, and passed the available native tests before and after cleanup. The fixture exposed an incompatible legacy Bash WASM before release; the adapter now uses the current `tree-sitter-bash` WASM and has a regression test.
 - A packed tarball built from an isolated clean directory installs in a clean prefix; its installed binary completes version reporting, one-finding and Grok four-finding batch apply, worktree/staged verification, exact undo without index mutation, post-cleanup zero-finding scan, the Grok fixture's 4/4 tests, and internal-import blocking. Local smoke also supports the exact installed TypeScript runtime offline.
 - Historical v1 evidence: PR `#1` merged as `7c65297`; tag `v1.0.0-rc.1`, main/tag CI, build-once release workflow `33878935406`, six installed-tarball jobs, online audit, SBOM, checksums, attestations, and a GitHub draft prerelease all passed.
+- [GitHub Actions run 34010327234](https://github.com/TAOMA-06/repofit-comments/actions/runs/34010327234) passed on multi-language implementation head `ab714f0`: Node 22/24 on Ubuntu, macOS, and Windows all completed strict checking, 140 tests, and fresh-registry package smoke; the benchmark also passed.
 
 ## Live model-generated evaluation
 
@@ -86,7 +87,7 @@ These are useful smoke cases, not a statistically valid precision or recall stud
 - The v1 corpus of at least twenty independent repositories and two hundred real development diffs has not been collected.
 - Maintainer blind A/B preference, real-world precision, recall, false-positive, and suggestion-acceptance thresholds have not been measured.
 - The source and TypeScript-family RC tag are public at [`TAOMA-06/repofit-comments`](https://github.com/TAOMA-06/repofit-comments). The RC Release remains draft; no npm package, Homebrew formula, stable release, or production distribution has been created.
-- Node.js 22/24 on macOS, Ubuntu, and Windows are verified for the TypeScript-family RC. The `1.1.0-alpha.1` multi-language branch has not run the remote matrix.
+- Node.js 22/24 on macOS, Ubuntu, and Windows are verified for both the TypeScript-family RC and the `1.1.0-alpha.1` multi-language implementation. The first alpha run exposed a Node 24 V8 WASM Zone OOM; the CLI/test launcher now starts Node 24 WASM work with `--liftoff-only`, and the replacement matrix passed.
 - The multi-language corpus has not yet been replayed on independent real repositories. Current evidence is deterministic fixture coverage, so no cross-language precision/recall or maintainer-preference claim is made.
 - SQL automatic writes, suggestion-only rewriting, variable renaming, and structural cleanup remain out of scope.
 

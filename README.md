@@ -6,7 +6,7 @@ RepoFit Comments 是一个本地终端工具，用来检查当前 Git Diff 中�
 
 它处理编号步骤、装饰性标题、附近重复、逐行复述、教程语气和生成过程叙述。它不判断代码作者，也不输出所谓“AI 概率”。
 
-当前源码为 `1.1.0-alpha.1` 多语言开发版。公开的 `v1.0.0-rc.1` 仍是 TypeScript 家族 RC；多语言版本尚未推送或发布。详细状态见 [STATUS.md](./STATUS.md)，三批扩展能力与证据要求见 [MULTILANGUAGE_EXPANSION.md](./docs/product/MULTILANGUAGE_EXPANSION.md)。
+当前源码为 `1.1.0-alpha.1` 多语言开发版。公开的 `v1.0.0-rc.1` 仍是 TypeScript 家族 RC；多语言 alpha 的发布状态见 [STATUS.md](./STATUS.md)，三批扩展能力与证据要求见 [MULTILANGUAGE_EXPANSION.md](./docs/product/MULTILANGUAGE_EXPANSION.md)。
 
 ## Language support
 

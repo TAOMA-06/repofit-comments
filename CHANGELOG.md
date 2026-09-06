@@ -23,6 +23,7 @@ All notable changes to RepoFit Comments are documented here. Versions follow Sem
 - Add multi-language raw-string, heredoc, CRLF, Unicode, component-boundary, and recoverable Python-fix regressions.
 - Use the current standalone Bash WASM after the live Muse fixture exposed an incompatible legacy dynamic-linking format.
 - Allow deterministic `Step N:` prefix removal at the start of a file while preserving the full explanation and continuing to protect ordinary headers and bare step labels.
+- Route Node 24 CLI and test WASM execution through Liftoff-only mode after the first remote matrix reproduced a V8 Zone OOM.
 
 ## 1.0.0-rc.1 - 2026-09-04
 
