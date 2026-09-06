@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, delimiter, dirname, join, resolve } from "node:path";
 
 const tarballArgument = process.argv[2];
 if (!tarballArgument) throw new Error("Usage: installed-smoke.mjs <package.tgz>");
@@ -69,8 +69,9 @@ function runCli(binary, args, cwd) {
 try {
   const installRoot = join(temporaryRoot, "install");
   mkdirSync(installRoot);
-  const localRuntime = process.env.REPOFIT_SMOKE_LOCAL_TYPESCRIPT;
-  const installSources = [tarball, ...(localRuntime ? [localRuntime] : [])];
+  const localRuntime = process.env.REPOFIT_SMOKE_LOCAL_DEPENDENCIES;
+  const localDependencies = localRuntime ? localRuntime.split(delimiter).filter(Boolean) : [];
+  const installSources = [tarball, ...localDependencies];
   const npm = npmInvocation();
   run(
     npm.command,
@@ -85,7 +86,7 @@ try {
       ...installSources,
     ],
     temporaryRoot,
-    localRuntime ? { npm_config_offline: "true" } : {},
+    localDependencies.length > 0 ? { npm_config_offline: "true" } : {},
   );
 
   const binary = join(
@@ -116,6 +117,9 @@ try {
   const version = runCli(binary, ["--version"], temporaryRoot);
   assert.equal(version.status, 0, version.stderr);
   assert.equal(version.stdout.trim(), installedManifest.version);
+  const languages = runCli(binary, ["languages", "--format", "json"], temporaryRoot);
+  assert.equal(languages.status, 0, languages.stderr);
+  assert.equal(JSON.parse(languages.stdout).languages.length, 19);
   const internalImport = spawnSync(
     process.execPath,
     ["--input-type=module", "--eval", "import('repofit-comments/dist/src/patch.js')"],
@@ -130,6 +134,7 @@ try {
   run("git", ["config", "user.email", "repofit@example.invalid"], fixture);
   run("git", ["config", "user.name", "RepoFit Installed Smoke"], fixture);
   const sourcePath = join(fixture, "sample.ts");
+  const pythonPath = join(fixture, "sample.py");
   const baseline = [
     "export function answer(): number {",
     "  const value = 42;",
@@ -138,10 +143,14 @@ try {
     "",
   ].join("\n");
   writeFileSync(sourcePath, baseline);
-  run("git", ["add", "sample.ts"], fixture);
+  const pythonBaseline = "def answer():\n    return 42\n";
+  writeFileSync(pythonPath, pythonBaseline);
+  run("git", ["add", "sample.ts", "sample.py"], fixture);
   run("git", ["commit", "-qm", "baseline"], fixture);
   const changed = baseline.replace("  return value;", "  // Main Logic\n  return value;");
   writeFileSync(sourcePath, changed);
+  const pythonChanged = 'marker = "# not a comment"\n# Step 1: return value\ndef answer():\n    return 42\n';
+  writeFileSync(pythonPath, pythonChanged);
 
   const doctor = runCli(binary, ["doctor", "--format", "json"], fixture);
   assert.equal(doctor.status, 0, doctor.stderr);
@@ -152,6 +161,12 @@ try {
     (candidate) => candidate.ruleId === "comments.decorative-heading",
   );
   assert.ok(finding);
+  const pythonFinding = JSON.parse(checked.stdout).findings.find(
+    (candidate) =>
+      candidate.relativePath === "sample.py" &&
+      candidate.ruleId === "comments.step-narration",
+  );
+  assert.ok(pythonFinding);
   const sarif = runCli(binary, ["check", "--worktree", "--format", "sarif"], fixture);
   assert.equal(sarif.status, 1, sarif.stderr);
   assert.equal(JSON.parse(sarif.stdout).version, "2.1.0");
@@ -161,6 +176,13 @@ try {
     assert.equal(applied.status, 5, applied.stderr);
     assert.match(applied.stderr, /disabled on Windows/);
     assert.equal(readFileSync(sourcePath, "utf8"), changed);
+    const pythonApplied = runCli(
+      binary,
+      ["fix", pythonFinding.id, "--worktree", "--apply"],
+      fixture,
+    );
+    assert.equal(pythonApplied.status, 5, pythonApplied.stderr);
+    assert.equal(readFileSync(pythonPath, "utf8"), pythonChanged);
   } else {
     assert.equal(applied.status, 0, applied.stderr);
     assert.doesNotMatch(readFileSync(sourcePath, "utf8"), /Main Logic/);
@@ -171,6 +193,14 @@ try {
     assert.equal(undone.status, 0, undone.stderr);
     assert.equal(readFileSync(sourcePath, "utf8"), changed);
     assert.doesNotMatch(run("git", ["show", ":sample.ts"], fixture), /Main Logic/);
+    const pythonApplied = runCli(
+      binary,
+      ["fix", pythonFinding.id, "--worktree", "--apply"],
+      fixture,
+    );
+    assert.equal(pythonApplied.status, 0, pythonApplied.stderr);
+    assert.match(readFileSync(pythonPath, "utf8"), /^# Return value$/m);
+    assert.equal(runCli(binary, ["verify"], fixture).status, 0);
   }
 
   process.stdout.write(

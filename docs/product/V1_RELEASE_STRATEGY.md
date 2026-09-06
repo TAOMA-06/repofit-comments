@@ -1,5 +1,7 @@
 # RepoFit Comments v1 发布策略
 
+> 本文件记录 TypeScript 家族 v1 发布策略。`1.1.0-alpha.1` 多语言能力与逐语言证据要求见 [MULTILANGUAGE_EXPANSION.md](./MULTILANGUAGE_EXPANSION.md)。
+
 状态：Technical RC pipeline implemented locally；external release gates open
 
 研究截止：2026-09-04（Asia/Shanghai）

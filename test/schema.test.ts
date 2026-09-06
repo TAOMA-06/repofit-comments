@@ -82,6 +82,7 @@ test("Ajv 2020 compiles every shipped schema and validates real CLI envelopes", 
       JSON.parse(readFileSync(join(root, ".repofit.json"), "utf8")),
     );
     validate(ajv, "doctor", runJson(root, ["doctor"], 0));
+    validate(ajv, "languages", runJson(root, ["languages"], 0));
 
     const path = join(root, "sample.ts");
     const baseline = "export function value(): number {\n  return 1;\n}\n";

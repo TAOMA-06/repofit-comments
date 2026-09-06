@@ -1,8 +1,8 @@
 # RepoFit Comments security model
 
-Status: 1.0.0-rc.1 technical security boundary
+Status: 1.1.0-alpha.1 multi-language technical security boundary
 
-Date: 2026-09-04
+Date: 2026-09-06
 
 ## Assets
 
@@ -26,6 +26,9 @@ A same-user attacker able to rewrite the repository, `.git/repofit-comments/`, a
 - RepoFit never executes target-repository scripts or loads executable project configuration.
 - Invalid UTF-8, unsafe path resolution, final symlinks, parent symlink/junction escapes, and multiple-hard-link source files are refused.
 - Generated and vendored files are protected at whole-file scope.
+- TypeScript/JavaScript analysis uses the TypeScript parser. Other automatic-fix languages use locally installed Tree-sitter WASM grammars; Shell uses the current standalone Bash grammar because the legacy bundle's dynamic-linking format failed the live multi-file gate. Grammar load or parse failure prevents automatic writing.
+- Node 24 CLI and test entry points use V8's Liftoff-only WASM mode. The initial remote matrix reproduced a V8 `Fatal process out of memory: Zone` while exercising all grammars concurrently; the launcher contains the flag within RepoFit's child process, and the subsequent six-combination matrix passed.
+- Vue and Svelte automatic writes are confined to JavaScript/TypeScript `<script>` regions; markup comments are protected. SQL is scan-and-review only and cannot enter the write transaction.
 
 ## Write transaction
 

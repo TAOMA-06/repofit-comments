@@ -67,7 +67,7 @@ export function buildStyleProfile(
       }
 
       sampleFileCount += 1;
-      codeLineCount += countCodeLines(content);
+      codeLineCount += countCodeLines(content, relativePath);
       const comments = extractComments(relativePath, content).filter(
         (comment) =>
           protectedReason(comment, config?.protect.phrases ?? []) === undefined,

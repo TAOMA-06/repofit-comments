@@ -1,8 +1,8 @@
 {
   "name": "repofit-comments",
-  "version": "1.0.0-rc.1",
+  "version": "1.1.0-alpha.1",
   "private": false,
-  "description": "Comment-first CLI for reducing AI-style narration in TypeScript diffs while preserving repository intent.",
+  "description": "Comment-first CLI for reducing AI-style narration across multi-language Git diffs while preserving repository intent.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -20,7 +20,7 @@
   "packageManager": "npm@11.19.1",
   "type": "module",
   "bin": {
-    "repofit": "dist/src/cli.js"
+    "repofit": "dist/src/launcher.js"
   },
   "exports": {
     "./package.json": "./package.json",
@@ -35,17 +35,20 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "benchmark": "npm run build && node scripts/benchmark.mjs",
+    "benchmark": "npm run build && node --liftoff-only scripts/benchmark.mjs",
     "check": "tsc -p tsconfig.json --noEmit",
     "prepare": "npm run build",
-    "test": "npm run build && node --test dist/test/*.test.js",
+    "test": "npm run build && node --liftoff-only --test dist/test/*.test.js",
     "test:package": "node scripts/package-smoke.mjs"
   },
   "engines": {
     "node": ">=22.14.0"
   },
   "dependencies": {
-    "typescript": "6.0.3"
+    "tree-sitter-bash": "0.25.1",
+    "tree-sitter-wasms": "0.1.13",
+    "typescript": "6.0.3",
+    "web-tree-sitter": "0.25.10"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

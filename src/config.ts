@@ -2,6 +2,7 @@ import { lstatSync, readFileSync } from "node:fs";
 import { matchesGlob, posix, resolve } from "node:path";
 
 import { decodeUtf8Bytes } from "./encoding.js";
+import { SUPPORTED_SOURCE_GLOBS } from "./language-registry.js";
 import { RULE_PACK_VERSION } from "./model.js";
 import {
   RULE_CATALOG,
@@ -107,7 +108,7 @@ const DEFAULT_LIMITS: ResourceLimits = {
   maxRecoveryBytes: 64 * 1024 * 1024,
 };
 
-const DEFAULT_INCLUDE = ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"];
+const DEFAULT_INCLUDE = [...SUPPORTED_SOURCE_GLOBS];
 const DEFAULT_EXCLUDE = [
   "**/node_modules/**",
   "**/vendor/**",

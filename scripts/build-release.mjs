@@ -13,7 +13,7 @@ const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const lockfile = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
 assert.equal(manifest.private, false, "release builds require private=false");
-assert.match(manifest.version, /^1\.0\.0-rc\.\d+$/);
+assert.match(manifest.version, /^1\.\d+\.\d+-(?:alpha|beta|rc)\.\d+$/);
 assert.equal(lockfile.version, manifest.version, "package-lock top-level version mismatch");
 assert.equal(lockfile.packages?.[""]?.version, manifest.version, "package-lock root version mismatch");
 const requiredNpmVersion = String(manifest.packageManager).replace(/^npm@/, "");
@@ -69,7 +69,7 @@ const expectedPaths = [
   ...listFiles(join(root, "schemas"), "schemas"),
 ].sort();
 assert.deepEqual(packagedPaths, expectedPaths, "release tarball allowlist mismatch");
-assert.equal(run(process.execPath, ["dist/src/cli.js", "--version"]).trim(), manifest.version);
+assert.equal(run(process.execPath, ["dist/src/launcher.js", "--version"]).trim(), manifest.version);
 const tarballPath = resolve(outputDirectory, tarballName);
 const sbomName = `${manifest.name}-${manifest.version}.spdx.json`;
 const sbomPath = resolve(outputDirectory, sbomName);

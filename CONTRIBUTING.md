@@ -12,4 +12,6 @@ Before opening a pull request:
 
 Changes to a rule must update the central rule catalog, positive and protected-negative fixtures, SARIF metadata expectations, and any affected shipped schema. Changes to configuration, receipt state, recovery, or pruning must include malformed-input and interruption tests. Windows automatic writes intentionally remain disabled until their DACL and filesystem transaction evidence is added.
 
+New language adapters must declare scan and automatic-fix capability separately, exclude comment markers inside strings/raw strings/heredocs, preserve native comment prefixes, protect language tooling directives, reject syntax errors before writing, and pass a real Git-diff fixture. A grammar count alone is not evidence of safe language support.
+
 Bug reports should include a minimal, non-sensitive example. Do not upload private source code merely to reproduce a comment rule.

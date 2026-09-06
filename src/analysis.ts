@@ -9,6 +9,7 @@ import {
   type RuleId,
 } from "./config.js";
 import { collectScopedFiles } from "./git.js";
+import { supportsAutomaticFixes } from "./language-registry.js";
 import type { AnalysisReport, FileAnalysis, Scope } from "./model.js";
 import { REPORT_SCHEMA_VERSION } from "./model.js";
 import { buildStyleProfile } from "./profile.js";
@@ -40,9 +41,23 @@ export function analyzeRepository(
       protectPhrases: config.protect.phrases,
       suppressionComments: allComments,
     });
+    const automaticFixes = supportsAutomaticFixes(file.relativePath, file.content);
     const findings = result.findings.flatMap((finding) => {
       const level = config.rules[finding.ruleId as RuleId];
-      return level === "off" ? [] : [{ ...finding, level }];
+      if (level === "off") return [];
+      if (
+        !automaticFixes &&
+        (finding.action === "remove-safe" || finding.action === "rewrite-safe")
+      ) {
+        return [{
+          ...finding,
+          action: "rewrite-suggested" as const,
+          level,
+          reason: `${finding.reason} Automatic fixes are unavailable for this language adapter.`,
+          evidence: [...finding.evidence, "This language currently supports scan and review only."],
+        }];
+      }
+      return [{ ...finding, level }];
     });
     findingCount += findings.length;
     if (findingCount > config.limits.maxFindings) {

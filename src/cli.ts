@@ -29,6 +29,7 @@ import {
 import { renderFinding, renderProfile, renderReport } from "./report.js";
 import { renderSarif } from "./sarif.js";
 import { initializeRepositoryConfig } from "./initialize.js";
+import { LANGUAGE_DEFINITIONS } from "./language-registry.js";
 import { listFixHistory, pruneFixHistory } from "./history.js";
 import { sanitizeTerminalText } from "./terminal.js";
 import {
@@ -94,6 +95,7 @@ Usage:
   repofit undo
   repofit init
   repofit doctor
+  repofit languages [--format terminal|json]
   repofit history list
   repofit history prune [--keep <count>] [--dry-run|--apply]
 
@@ -138,7 +140,7 @@ interface CommonArguments {
 
 type ScopedCommand<Name extends "profile" | "check" | "preview"> =
   CommonArguments & { command: Name; scope: Scope };
-type JournalCommand<Name extends "recover" | "undo" | "init" | "doctor"> = CommonArguments & {
+type JournalCommand<Name extends "recover" | "undo" | "init" | "doctor" | "languages"> = CommonArguments & {
   command: Name;
 };
 
@@ -167,6 +169,7 @@ type ParsedArguments =
   | JournalCommand<"undo">
   | JournalCommand<"init">
   | JournalCommand<"doctor">
+  | JournalCommand<"languages">
   | (CommonArguments & {
       command: "history";
       action: "list" | "prune";
@@ -195,7 +198,7 @@ function parseArguments(argv: string[]): ParsedArguments {
   }
   const compatibilityGroup = argv[0] === "comments";
   const rawCommand = argv[compatibilityGroup ? 1 : 0];
-  if (!rawCommand || !["profile", "check", "preview", "explain", "fix", "verify", "recover", "undo", "init", "doctor", "history"].includes(rawCommand)) {
+  if (!rawCommand || !["profile", "check", "preview", "explain", "fix", "verify", "recover", "undo", "init", "doctor", "languages", "history"].includes(rawCommand)) {
     throw new Error(`Unknown or missing comments command: ${rawCommand ?? "(missing)"}`);
   }
   const command = rawCommand as Command;
@@ -329,6 +332,7 @@ function parseArguments(argv: string[]): ParsedArguments {
       command === "undo" ||
       command === "init" ||
       command === "doctor" ||
+      command === "languages" ||
       command === "history") &&
     selectedScopes !== 0
   ) {
@@ -382,6 +386,7 @@ function parseArguments(argv: string[]): ParsedArguments {
     case "undo":
     case "init":
     case "doctor":
+    case "languages":
       return { ...common, command };
     case "history":
       return {
@@ -499,6 +504,35 @@ function run(argv: string[]): number {
   } catch (error) {
     if (error instanceof CliError) throw error;
     usageError(messageFrom(error));
+  }
+  if (parsed.command === "languages") {
+    if (parsed.printConfig) usageError("languages cannot be combined with --print-config.");
+    const languages = LANGUAGE_DEFINITIONS.map((definition) => ({
+      id: definition.id,
+      label: definition.label,
+      batch: definition.batch,
+      extensions: [...definition.extensions],
+      analysis: "supported" as const,
+      automaticFixes: definition.automaticFixes,
+    }));
+    if (parsed.format === "json") {
+      printJson({
+        schemaVersion: "1.0",
+        type: "languages",
+        toolVersion: VERSION,
+        languages,
+      });
+    } else {
+      for (const batch of [1, 2, 3] as const) {
+        process.stdout.write(`Batch ${batch}\n`);
+        for (const language of languages.filter((item) => item.batch === batch)) {
+          process.stdout.write(
+            `  ${language.label}: ${language.extensions.join(", ")} (${language.automaticFixes ? "scan + safe fix" : "scan + review"})\n`,
+          );
+        }
+      }
+    }
+    return 0;
   }
   const root = discoverRepositoryRoot(parsed.cwd);
   if (parsed.command === "init") {

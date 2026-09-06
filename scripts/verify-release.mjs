@@ -6,7 +6,7 @@ import { basename, join, resolve } from "node:path";
 const directory = resolve(process.argv[2] ?? "release");
 const manifest = JSON.parse(readFileSync(join(directory, "release-manifest.json"), "utf8"));
 assert.equal(manifest.schemaVersion, "1.0");
-assert.match(manifest.version, /^1\.0\.0-rc\.\d+$/);
+assert.match(manifest.version, /^1\.\d+\.\d+-(?:alpha|beta|rc)\.\d+$/);
 assert.match(manifest.sourceCommit, /^[0-9a-f]{40}$/);
 assert.equal(manifest.nodeVersion.startsWith("v"), true);
 assert.equal(manifest.npmVersion, "11.19.1");
@@ -46,5 +46,15 @@ assert.ok(
       item.primaryPackagePurpose === "APPLICATION",
   ),
 );
-assert.ok(sbom.packages.some((item) => item.name === "typescript"));
+for (const dependency of [
+  "typescript",
+  "web-tree-sitter",
+  "tree-sitter-wasms",
+  "tree-sitter-bash",
+]) {
+  assert.ok(
+    sbom.packages.some((item) => item.name === dependency),
+    `SBOM is missing runtime dependency ${dependency}`,
+  );
+}
 process.stdout.write(`Verified release ${manifest.version} from ${manifest.sourceCommit}.\n`);
